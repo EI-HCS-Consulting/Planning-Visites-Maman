@@ -17,8 +17,7 @@ const RULES = [
   { icon: "🕐", text: "Créneaux : 11h, 13h, 15h, 17h" },
   { icon: "⏳", text: "Au moins 2h entre chaque visite" },
   { icon: "🌙", text: "1 personne peut rester la nuit" },
-  { icon: "💛", text: "Elle est combative et veut revenir parmi nous !" },
-];
+  ];
 
 const C = {
   bg: "#0D1B2E", card: "#112240", border: "#1E3A5F",
