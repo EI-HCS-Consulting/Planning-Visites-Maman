@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
 
-const SLOTS = ["12:00", "14:00", "16:00", "18:00", "20:00"];
+const SLOTS = ["12:00", "14:00", "16:00", "18:00"];
 const START_DATE = new Date("2026-05-12T00:00:00");
 const NIGHT_SUSPENDED_FROM = new Date("2026-05-15T00:00:00");
 
@@ -17,10 +17,10 @@ const APP_URL = "https://planning-visites-maman.vercel.app";
 const RULES = [
   { icon: "⏱️", text: "15 à 20 minutes maximum par visite" },
   { icon: "👥", text: "2 personnes maximum par créneau" },
-  { icon: "🕐", text: "Créneaux : de 12h à 20h" },
+  { icon: "🕐", text: "Créneaux : 12h, 14h, 16h, 18h" },
   { icon: "⏳", text: "Au moins 2h entre chaque visite" },
   { icon: "🤫", text: "Peu de sollicitation : maman a besoin de repos. Si elle dort, la laisser dormir sans faire de bruit — elle ressent notre présence." },
-  { icon: "🚨", text: "Au moindre doute pendant la visite, alerter immédiatement le personnel soignant." },
+  { icon: "🚨", text: "Au moindre doute pendant la visite, alerter immédiatement le personnel soignant — c'est à nous de le faire." },
   { icon: "🚪", text: "À la fin de la visite, laisser la porte grande ouverte pour que le personnel puisse surveiller que tout va bien." },
   { icon: "🌙", text: "Les nuitées familiales sont suspendues depuis le 15/05/2026." },
 ];
@@ -124,6 +124,7 @@ export default function App() {
   const [nextDispoModal, setNextDispoModal] = useState(null);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [installSuccess, setInstallSuccess] = useState(false);
+  const [manualInstallOpen, setManualInstallOpen] = useState(false);
 
   // Détection responsive
   const [isMobile, setIsMobile] = useState(typeof window !== "undefined" ? window.innerWidth < 640 : false);
@@ -252,12 +253,14 @@ export default function App() {
   // PWA install
   async function handleInstall() {
     if (deferredPrompt) {
+      // Cas idéal : Chrome a capturé l'événement, on peut installer directement
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === "accepted") setInstallSuccess(true);
       setDeferredPrompt(null);
     } else {
-      showToast("Suis les instructions affichées pour installer manuellement 👇");
+      // Sinon : ouvrir la popup avec les instructions précises
+      setManualInstallOpen(true);
     }
   }
 
@@ -669,75 +672,174 @@ export default function App() {
         {/* ===== INSTALLER (PWA) ===== */}
         {tab === "install" && (
           <div>
-            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"20px 18px", marginBottom:12, textAlign:"center" }}>
-              <div style={{ fontSize:"3rem", marginBottom:8 }}>⬇️</div>
-              <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 6px", color:"#fff" }}>Installer l'application</h2>
-              <p style={{ fontSize:"0.82rem", color:C.muted, margin:"0 0 18px", lineHeight:1.5 }}>
-                Ajoute l'app sur ton écran d'accueil pour y accéder en 1 clic, comme une vraie appli.
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"24px 20px", marginBottom:14, textAlign:"center" }}>
+              <div style={{ fontSize:"3rem", marginBottom:8 }}>📲</div>
+              <h2 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.2rem", margin:"0 0 6px", color:"#fff" }}>Installer l'application</h2>
+              <p style={{ fontSize:"0.84rem", color:C.muted, margin:"0 0 22px", lineHeight:1.5 }}>
+                Ajoute l'app sur ton écran d'accueil pour y accéder en 1 clic.
               </p>
 
               {installSuccess ? (
-                <div style={{ padding:"16px", background:"rgba(62,207,142,0.15)", border:`1px solid ${C.success}`, borderRadius:10, color:C.success, fontWeight:600, fontSize:"0.9rem" }}>
+                <div style={{ padding:"14px", background:"rgba(62,207,142,0.15)", border:`1px solid ${C.success}`, borderRadius:10, color:C.success, fontWeight:600, fontSize:"0.9rem" }}>
                   ✅ Application installée avec succès !
                 </div>
               ) : (
-                <button onClick={handleInstall} style={{
-                  width:"100%", padding:"14px", background:`linear-gradient(135deg, ${C.gold}, #c69100)`, color:"#0D1B2E", border:"none", borderRadius:10, cursor:"pointer", fontWeight:700, fontSize:"0.95rem", fontFamily:"'DM Sans',system-ui,sans-serif", boxShadow:"0 4px 15px rgba(240,180,41,0.3)"
-                }}>
-                  {deferredPrompt ? "📲 Installer maintenant" : "📲 Voir les instructions"}
-                </button>
+                <>
+                  {/* BOUTON PRINCIPAL — TOUJOURS VISIBLE */}
+                  <button onClick={handleInstall} style={{
+                    width:"100%",
+                    padding:"16px",
+                    background:`linear-gradient(135deg, ${C.gold}, #c69100)`,
+                    color:"#0D1B2E",
+                    border:"none",
+                    borderRadius:12,
+                    cursor:"pointer",
+                    fontWeight:700,
+                    fontSize:"1rem",
+                    fontFamily:"'DM Sans',system-ui,sans-serif",
+                    boxShadow:"0 4px 18px rgba(240,180,41,0.35)",
+                    marginBottom:10,
+                  }}>
+                    📲 {deferredPrompt ? "Installer maintenant" : "Comment installer ?"}
+                  </button>
+
+                  {!deferredPrompt && (
+                    <p style={{ fontSize:"0.72rem", color:C.muted, margin:"0 0 14px", fontStyle:"italic" }}>
+                      Ton navigateur ne supporte pas l'installation automatique. Touche le bouton pour voir comment faire.
+                    </p>
+                  )}
+
+                  {/* Bouton secondaire : partage natif */}
+                  <button onClick={async () => {
+                    if (navigator.share) {
+                      try {
+                        await navigator.share({
+                          title: "Visites Rose-Marie",
+                          text: "Planning des visites à l'hôpital Michallon",
+                          url: APP_URL,
+                        });
+                      } catch(e) { /* annulé */ }
+                    } else {
+                      navigator.clipboard?.writeText(APP_URL);
+                      showToast("Lien copié — colle-le où tu veux !");
+                    }
+                  }} style={{
+                    width:"100%",
+                    padding:"12px",
+                    background:"transparent",
+                    color:C.accent,
+                    border:`1px solid ${C.accent}`,
+                    borderRadius:10,
+                    cursor:"pointer",
+                    fontWeight:600,
+                    fontSize:"0.85rem",
+                    fontFamily:"'DM Sans',system-ui,sans-serif",
+                  }}>
+                    📤 Envoyer le lien par SMS/WhatsApp
+                  </button>
+                </>
               )}
             </div>
 
-            {/* Instructions selon device */}
-            {device === "ios" && (
-              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"16px 18px" }}>
-                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"0.95rem", margin:"0 0 12px", color:"#fff" }}>📱 Sur iPhone / iPad</h3>
-                <ol style={{ margin:0, paddingLeft:20, fontSize:"0.82rem", color:C.text, lineHeight:1.8 }}>
-                  <li>Ouvre cette page dans <strong style={{color:C.gold}}>Safari</strong> (pas Chrome)</li>
-                  <li>Touche le bouton <strong style={{color:C.gold}}>Partager</strong> en bas <span style={{color:C.muted}}>(carré avec flèche ↑)</span></li>
-                  <li>Fais défiler et touche <strong style={{color:C.gold}}>"Sur l'écran d'accueil"</strong></li>
-                  <li>Touche <strong style={{color:C.gold}}>"Ajouter"</strong> en haut à droite</li>
-                </ol>
-                <div style={{ fontSize:"0.75rem", color:C.muted, fontStyle:"italic", marginTop:12, padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
-                  L'icône Rose-Marie apparaîtra sur ton écran d'accueil 💛
+            {/* Aperçu visuel de ce qui va se passer */}
+            <div style={{ background:"rgba(46,117,182,0.08)", border:`1px solid rgba(46,117,182,0.25)`, borderRadius:12, padding:"14px 16px", display:"flex", gap:14, alignItems:"center" }}>
+              <div style={{ width:54, height:54, borderRadius:14, overflow:"hidden", border:`2px solid ${C.gold}`, flexShrink:0, background:C.bg }}>
+                <img src={PHOTO} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+              </div>
+              <div>
+                <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Rose-Marie</div>
+                <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:2 }}>
+                  L'icône qui apparaîtra sur ton écran d'accueil ↑
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL INSTRUCTIONS INSTALLATION MANUELLE */}
+      {manualInstallOpen && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120, padding:16, overflowY:"auto" }}
+          onClick={() => setManualInstallOpen(false)}>
+          <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"22px 20px", width:"100%", maxWidth:380, maxHeight:"90vh", overflowY:"auto" }}
+            onClick={e => e.stopPropagation()}>
+
+            <div style={{ textAlign:"center", marginBottom:18 }}>
+              <div style={{ fontSize:"2.4rem", marginBottom:6 }}>📲</div>
+              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 4px", color:"#fff" }}>Comment installer ?</h3>
+              <p style={{ fontSize:"0.76rem", color:C.muted, margin:0 }}>
+                {device === "ios" ? "Sur iPhone / iPad" : device === "android" ? "Sur Android" : "Sur ordinateur"}
+              </p>
+            </div>
+
+            {device === "ios" && (
+              <>
+                <div style={{ background:"rgba(233,69,96,0.1)", border:`1px solid rgba(233,69,96,0.3)`, borderRadius:8, padding:"10px 12px", marginBottom:14, fontSize:"0.78rem", color:C.danger }}>
+                  ⚠️ Tu dois utiliser <strong>Safari</strong> (pas Chrome ni Firefox)
+                </div>
+                <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
+                    <span>Touche le bouton <strong style={{color:C.gold}}>Partager</strong> en bas de Safari (carré avec une flèche ↑)</span>
+                  </div>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
+                    <span>Fais défiler et touche <strong style={{color:C.gold}}>"Sur l'écran d'accueil"</strong> (icône ⊕)</span>
+                  </div>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
+                    <span>Touche <strong style={{color:C.gold}}>"Ajouter"</strong> en haut à droite</span>
+                  </div>
+                </div>
+              </>
             )}
 
             {device === "android" && (
-              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"16px 18px" }}>
-                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"0.95rem", margin:"0 0 12px", color:"#fff" }}>📱 Sur Android</h3>
-                <ol style={{ margin:0, paddingLeft:20, fontSize:"0.82rem", color:C.text, lineHeight:1.8 }}>
-                  <li>Touche le bouton <strong style={{color:C.gold}}>"Installer maintenant"</strong> ci-dessus</li>
-                  <li>OU ouvre le menu <strong style={{color:C.gold}}>⋮</strong> de Chrome (en haut à droite)</li>
-                  <li>Touche <strong style={{color:C.gold}}>"Installer l'application"</strong></li>
-                  <li>Confirme en touchant <strong style={{color:C.gold}}>"Installer"</strong></li>
-                </ol>
-                <div style={{ fontSize:"0.75rem", color:C.muted, fontStyle:"italic", marginTop:12, padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
-                  L'icône Rose-Marie apparaîtra sur ton écran d'accueil 💛
+              <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
+                  <span>Touche le menu <strong style={{color:C.gold}}>⋮</strong> (3 points) en haut à droite de Chrome</span>
+                </div>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
+                  <span>Touche <strong style={{color:C.gold}}>"Ajouter à l'écran d'accueil"</strong> ou <strong style={{color:C.gold}}>"Installer l'application"</strong></span>
+                </div>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
+                  <span>Confirme en touchant <strong style={{color:C.gold}}>"Ajouter"</strong> ou <strong style={{color:C.gold}}>"Installer"</strong></span>
+                </div>
+                <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
+                  💡 Si tu utilises un autre navigateur (Firefox, Samsung Internet…), ouvre cette page dans <strong>Chrome</strong> pour de meilleurs résultats.
                 </div>
               </div>
             )}
 
             {device === "desktop" && (
-              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"16px 18px" }}>
-                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"0.95rem", margin:"0 0 12px", color:"#fff" }}>💻 Sur ordinateur</h3>
-                <ol style={{ margin:0, paddingLeft:20, fontSize:"0.82rem", color:C.text, lineHeight:1.8 }}>
-                  <li>Dans <strong style={{color:C.gold}}>Chrome</strong> ou <strong style={{color:C.gold}}>Edge</strong>, regarde la barre d'adresse</li>
-                  <li>Clique sur l'icône <strong style={{color:C.gold}}>"Installer"</strong> (⬇️ ou 🖥️) à droite de l'URL</li>
-                  <li>OU ouvre le menu <strong style={{color:C.gold}}>⋮</strong> → "Installer Visites Rose-Marie..."</li>
-                  <li>Confirme l'installation</li>
-                </ol>
-                <div style={{ fontSize:"0.75rem", color:C.muted, fontStyle:"italic", marginTop:12, padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
-                  L'app s'ouvrira dans sa propre fenêtre, sans barre du navigateur 💛
+              <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
+                  <span>Dans <strong style={{color:C.gold}}>Chrome</strong> ou <strong style={{color:C.gold}}>Edge</strong>, regarde à droite de la barre d'adresse</span>
+                </div>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
+                  <span>Clique sur l'icône <strong style={{color:C.gold}}>⬇️</strong> ou <strong style={{color:C.gold}}>🖥️</strong> "Installer"</span>
+                </div>
+                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
+                  <span>Sinon : menu <strong style={{color:C.gold}}>⋮</strong> → <strong style={{color:C.gold}}>"Installer Visites Rose-Marie..."</strong></span>
+                </div>
+                <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
+                  💡 L'app aura son raccourci dans le menu Démarrer (Windows) ou Launchpad (Mac).
                 </div>
               </div>
             )}
-          </div>
-        )}
 
-      </div>
+            <button style={{ width:"100%", padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginTop:14 }}
+              onClick={() => setManualInstallOpen(false)}>
+              J'ai compris
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* MODAL PHOTO */}
       {photoOpen && (
