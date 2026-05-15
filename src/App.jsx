@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
+import mamanPhoto from "./assets/maman.png";
 
 const SLOTS = ["12:00", "14:00", "16:00", "18:00"];
 const START_DATE = new Date("2026-05-12T00:00:00");
@@ -25,8 +26,6 @@ const RULES = [
   { icon: "🚪", text: "À la fin de la visite, laisser la porte grande ouverte pour que le personnel puisse surveiller que tout va bien." },
   { icon: "🌙", text: "Les nuitées familiales sont suspendues par l'équipe médicale depuis le 15/05/2026." },
 ];
-
-import mamanPhoto from "./assets/maman.png";
 
 const C = {
   bg: "#0D1B2E", card: "#112240", border: "#1E3A5F",
@@ -745,7 +744,7 @@ export default function App() {
             {/* Aperçu visuel de ce qui va se passer */}
             <div style={{ background:"rgba(46,117,182,0.08)", border:`1px solid rgba(46,117,182,0.25)`, borderRadius:12, padding:"14px 16px", display:"flex", gap:14, alignItems:"center" }}>
               <div style={{ width:54, height:54, borderRadius:14, overflow:"hidden", border:`2px solid ${C.gold}`, flexShrink:0, background:C.bg }}>
-                <img src={PHOTO} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+                <img src={mamanPhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
               </div>
               <div>
                 <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Rose-Marie</div>
@@ -847,7 +846,7 @@ export default function App() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:150, padding:16, cursor:"pointer" }}
           onClick={() => setPhotoOpen(false)}>
           <div style={{ width:350, height:350, borderRadius:"50%", border:`4px solid ${C.gold}`, overflow:"hidden", boxShadow:"0 0 0 6px rgba(240,180,41,0.2), 0 20px 60px rgba(0,0,0,0.6)" }}>
-            <img src={PHOTO} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+            <img src={mamanPhoto} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
           </div>
         </div>
       )}
