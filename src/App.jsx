@@ -22,6 +22,7 @@ const RULES = [
   { icon: "🤫", text: "Peu de sollicitation : maman a besoin de repos. Si elle dort, la laisser dormir sans faire de bruit — elle ressent notre présence." },
   { icon: "🚨", text: "Au moindre doute pendant la visite, alerter immédiatement le personnel soignant — c'est à nous de le faire." },
   { icon: "🚪", text: "À la fin de la visite, laisser la porte grande ouverte pour que le personnel puisse surveiller que tout va bien." },
+  { icon: "📖", text: "Un livre a été laissé dans la chambre pour maman : chacun peut y écrire un mot, un souvenir, un poème, coller une photo ou un dessin afin de lui laisser une trace de notre présence." },
   { icon: "🌙", text: "Les nuitées familiales sont suspendues depuis le 15/05/2026." },
 ];
 
