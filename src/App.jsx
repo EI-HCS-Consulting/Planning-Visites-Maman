@@ -666,9 +666,10 @@ export default function App() {
                 💡 Tu peux aussi envoyer le lien directement par SMS ou WhatsApp
               </div>
             </div>
+           </div>
           </div>
-          )}
-        </div>
+        )}
+
         {/* ===== INSTALLER (PWA) ===== */}
         {tab === "install" && (
           <div>
