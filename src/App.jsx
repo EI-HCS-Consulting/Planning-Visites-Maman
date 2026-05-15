@@ -22,7 +22,7 @@ const RULES = [
   { icon: "⏳", text: "Au moins 2h entre chaque visite" },
   { icon: "🤫", text: "Peu de sollicitation : maman a besoin de repos. Si elle dort, la laisser dormir sans faire de bruit — elle ressent notre présence." },
   { icon: "🚨", text: "Au moindre doute pendant la visite, alerter immédiatement le personnel soignant — c'est à nous de le faire." },
-  { icon: "📖", text: "Un livre a été laissé dans la chambre pour maman : chacun peut y écrire un mot, un souvenir, un poème, coller une photo ou un dessin afin de lui laisser une trace de notre présence." },
+  { icon: "📖", text: "Un livre a été laissé dans la chambre pour maman : chacun peut y écrire un mot, un souvenir, un poème, coller une photo ou un dessin afin de lui laisser une trace de [...]" },
   { icon: "🚪", text: "À la fin de la visite, laisser la porte grande ouverte pour que le personnel puisse surveiller que tout va bien." },
   { icon: "🌙", text: "Les nuitées familiales sont suspendues par l'équipe médicale depuis le 15/05/2026." },
 ];
@@ -420,7 +420,7 @@ export default function App() {
           <div>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"14px 16px" }}>
               <button onClick={prevDay} disabled={sameDay(currentDay, START_DATE)}
-                style={{ background:"transparent", border:`1px solid ${C.border}`, color: sameDay(currentDay,START_DATE) ? C.muted : C.text, borderRadius:6, padding:"8px 14px", cursor: sameDay(currentDay,START_DATE) ? "default" : "pointer", fontSize:"1.1rem" }}>‹</button>
+                style={{ background:"transparent", border:`1px solid ${C.border}`, color: sameDay(currentDay,START_DATE) ? C.muted : C.text, borderRadius:6, padding:"8px 14px", cursor: sameDay(currentDay,START_DATE) ? "default" : "pointer", fontSize:"1rem" }}>‹</button>
               <div style={{ textAlign:"center" }}>
                 <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.05rem", fontWeight:700, color:"#fff", textTransform:"capitalize" }}>
                   {toFrLong(currentDay)}
@@ -436,7 +436,7 @@ export default function App() {
               const occ = getVisitors(iso, slot);
               const full = occ.length >= 2;
               return (
-                <div key={slot} style={{ background:C.card, border:`1px solid ${full ? "rgba(233,69,96,0.3)" : C.border}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div key={slot} style={{ background:C.card, border:`1px solid ${full ? "rgba(233,69,96,0.3)" : C.border}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
                   <div>
                     <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.3rem", fontWeight:700, color:C.gold }}>{slot}</div>
                     <div style={{ fontSize:"0.75rem", color:C.muted, marginTop:2 }}>{occ.length}/2 inscrits</div>
@@ -448,7 +448,7 @@ export default function App() {
                     </div>
                   </div>
                   <button onClick={() => !full && openModal("visit", toISO(currentDay), slot)}
-                    style={{ padding:"9px 16px", background: full ? "transparent" : C.accent, color: full ? C.muted : "#fff", border: full ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: full ? "default" : "pointer", fontWeight:600, fontSize:"0.8rem", fontFamily:"'DM Sans',system-ui,sans-serif", whiteSpace:"nowrap" }}>
+                    style={{ padding:"9px 16px", background: full ? "transparent" : C.accent, color: full ? C.muted : "#fff", border: full ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: full ? "default" : "pointer", fontWeight:600, fontSize:"0.78rem", flexShrink:0 }}>
                     {full ? "Complet" : "+ Réserver"}
                   </button>
                 </div>
@@ -465,7 +465,7 @@ export default function App() {
               if (suspended) {
                 return (
                   <div onClick={() => setSuspendedAlert(true)}
-                    style={{ background:"rgba(122,143,166,0.08)", border:`1px dashed ${C.muted}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer", opacity:0.8 }}>
+                    style={{ background:"rgba(122,143,166,0.08)", border:`1px dashed ${C.muted}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }}>
                     <div>
                       <div style={{ fontSize:"1.1rem", marginBottom:2 }}>🌙</div>
                       <div style={{ fontSize:"0.82rem", fontWeight:600, color:C.muted }}>Nuitée suspendue</div>
@@ -482,7 +482,7 @@ export default function App() {
               }
 
               return (
-                <div style={{ background: full ? "rgba(233,69,96,0.07)" : "rgba(240,180,41,0.07)", border:`1px solid ${full ? "rgba(233,69,96,0.3)" : "rgba(240,180,41,0.3)"}`, borderRadius:10, padding:"14px 16px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ background: full ? "rgba(233,69,96,0.07)" : "rgba(240,180,41,0.07)", border:`1px solid ${full ? "rgba(233,69,96,0.3)" : "rgba(240,180,41,0.3)"}`, borderRadius:10, padding:"14px 16px", marginBottom:10, display:"flex", alignItems:"flex-start", justifyContent:"space-between" }}>
                   <div>
                     <div style={{ fontSize:"1.1rem", marginBottom:2 }}>🌙</div>
                     <div style={{ fontSize:"0.82rem", fontWeight:600, color:C.gold }}>Nuit · {occ ? 1 : 0}/1 inscrits</div>
@@ -495,7 +495,7 @@ export default function App() {
                     </div>
                   </div>
                   <button onClick={() => !full && openModal("night", toISO(currentDay))}
-                    style={{ padding:"9px 16px", background: full ? "transparent" : C.gold, color: full ? C.muted : "#0D1B2E", border: full ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: full ? "default" : "pointer", fontWeight:700, fontSize:"0.8rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                    style={{ padding:"9px 16px", background: full ? "transparent" : C.gold, color: full ? C.muted : "#0D1B2E", border: full ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: full ? "default" : "pointer", fontWeight:600, fontSize:"0.78rem", flexShrink:0 }}>
                     {full ? "Occupé" : "+ Réserver"}
                   </button>
                 </div>
@@ -518,7 +518,7 @@ export default function App() {
 
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, background:C.card, border:`1px solid ${C.border}`, borderRadius:12, padding:"14px 16px" }}>
               <button onClick={prevNightDay} disabled={sameDay(currentNightDay, START_DATE)}
-                style={{ background:"transparent", border:`1px solid ${C.border}`, color: sameDay(currentNightDay,START_DATE) ? C.muted : C.text, borderRadius:6, padding:"8px 14px", cursor: sameDay(currentNightDay,START_DATE) ? "default" : "pointer", fontSize:"1.1rem" }}>‹</button>
+                style={{ background:"transparent", border:`1px solid ${C.border}`, color: sameDay(currentNightDay,START_DATE) ? C.muted : C.text, borderRadius:6, padding:"8px 14px", cursor: sameDay(currentNightDay,START_DATE) ? "default" : "pointer", fontSize:"1rem" }}>‹</button>
               <div style={{ textAlign:"center" }}>
                 <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.05rem", fontWeight:700, color:"#fff", textTransform:"capitalize" }}>
                   {toFrLong(currentNightDay)}
@@ -563,7 +563,7 @@ export default function App() {
                     </button>
                   ) : (
                     <button onClick={() => !occ && openModal("night", iso)}
-                      style={{ padding:"12px 28px", background: occ ? "transparent" : C.gold, color: occ ? C.muted : "#0D1B2E", border: occ ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: occ ? "default" : "pointer", fontWeight:700, fontSize:"0.9rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                      style={{ padding:"12px 28px", background: occ ? "transparent" : C.gold, color: occ ? C.muted : "#0D1B2E", border: occ ? `1px solid ${C.border}` : "none", borderRadius:8, cursor: occ ? "default" : "pointer", fontWeight:600, fontSize:"0.85rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
                       {occ ? "Occupée" : "+ Réserver cette nuit"}
                     </button>
                   )}
@@ -666,7 +666,6 @@ export default function App() {
                 💡 Tu peux aussi envoyer le lien directement par SMS ou WhatsApp
               </div>
             </div>
-           </div>
           </div>
         )}
 
@@ -758,214 +757,213 @@ export default function App() {
         )}
 
         {/* MODAL INSTRUCTIONS INSTALLATION MANUELLE */}
-      {manualInstallOpen && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120, padding:16, overflowY:"auto" }}
-          onClick={() => setManualInstallOpen(false)}>
-          <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"22px 20px", width:"100%", maxWidth:380, maxHeight:"90vh", overflowY:"auto" }}
-            onClick={e => e.stopPropagation()}>
+        {manualInstallOpen && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:120, padding:16, overflowY:"auto" }}
+            onClick={() => setManualInstallOpen(false)}>
+            <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"22px 20px", width:"100%", maxWidth:380, maxHeight:"90vh", overflowY:"auto" }}
+              onClick={e => e.stopPropagation()}>
 
-            <div style={{ textAlign:"center", marginBottom:18 }}>
-              <div style={{ fontSize:"2.4rem", marginBottom:6 }}>📲</div>
-              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 4px", color:"#fff" }}>Comment installer ?</h3>
-              <p style={{ fontSize:"0.76rem", color:C.muted, margin:0 }}>
-                {device === "ios" ? "Sur iPhone / iPad" : device === "android" ? "Sur Android" : "Sur ordinateur"}
-              </p>
-            </div>
+              <div style={{ textAlign:"center", marginBottom:18 }}>
+                <div style={{ fontSize:"2.4rem", marginBottom:6 }}>📲</div>
+                <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 4px", color:"#fff" }}>Comment installer ?</h3>
+                <p style={{ fontSize:"0.76rem", color:C.muted, margin:0 }}>
+                  {device === "ios" ? "Sur iPhone / iPad" : device === "android" ? "Sur Android" : "Sur ordinateur"}
+                </p>
+              </div>
 
-            {device === "ios" && (
-              <>
-                <div style={{ background:"rgba(233,69,96,0.1)", border:`1px solid rgba(233,69,96,0.3)`, borderRadius:8, padding:"10px 12px", marginBottom:14, fontSize:"0.78rem", color:C.danger }}>
-                  ⚠️ Tu dois utiliser <strong>Safari</strong> (pas Chrome ni Firefox)
-                </div>
+              {device === "ios" && (
+                <>
+                  <div style={{ background:"rgba(233,69,96,0.1)", border:`1px solid rgba(233,69,96,0.3)`, borderRadius:8, padding:"10px 12px", marginBottom:14, fontSize:"0.78rem", color:C.danger }}>
+                    ⚠️ Tu dois utiliser <strong>Safari</strong> (pas Chrome ni Firefox)
+                  </div>
+                  <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
+                    <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                      <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>1</span>
+                      <span>Touche le bouton <strong style={{color:C.gold}}>Partager</strong> en bas de Safari (carré avec une flèche ↑)</span>
+                    </div>
+                    <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                      <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>2</span>
+                      <span>Fais défiler et touche <strong style={{color:C.gold}}>"Sur l'écran d'accueil"</strong> (icône ⊕)</span>
+                    </div>
+                    <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                      <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>3</span>
+                      <span>Touche <strong style={{color:C.gold}}>"Ajouter"</strong> en haut à droite</span>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {device === "android" && (
                 <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
-                    <span>Touche le bouton <strong style={{color:C.gold}}>Partager</strong> en bas de Safari (carré avec une flèche ↑)</span>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>1</span>
+                    <span>Touche le menu <strong style={{color:C.gold}}>⋮</strong> (3 points) en haut à droite de Chrome</span>
                   </div>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
-                    <span>Fais défiler et touche <strong style={{color:C.gold}}>"Sur l'écran d'accueil"</strong> (icône ⊕)</span>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>2</span>
+                    <span>Touche <strong style={{color:C.gold}}>"Ajouter à l'écran d'accueil"</strong> ou <strong style={{color:C.gold}}>"Installer l'application"</strong></span>
                   </div>
                   <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
-                    <span>Touche <strong style={{color:C.gold}}>"Ajouter"</strong> en haut à droite</span>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>3</span>
+                    <span>Confirme en touchant <strong style={{color:C.gold}}>"Ajouter"</strong> ou <strong style={{color:C.gold}}>"Installer"</strong></span>
+                  </div>
+                  <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
+                    💡 Si tu utilises un autre navigateur (Firefox, Samsung Internet…), ouvre cette page dans <strong>Chrome</strong> pour de meilleurs résultats.
                   </div>
                 </div>
-              </>
-            )}
+              )}
 
-            {device === "android" && (
-              <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
-                  <span>Touche le menu <strong style={{color:C.gold}}>⋮</strong> (3 points) en haut à droite de Chrome</span>
+              {device === "desktop" && (
+                <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>1</span>
+                    <span>Dans <strong style={{color:C.gold}}>Chrome</strong> ou <strong style={{color:C.gold}}>Edge</strong>, regarde à droite de la barre d'adresse</span>
+                  </div>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>2</span>
+                    <span>Clique sur l'icône <strong style={{color:C.gold}}>⬇️</strong> ou <strong style={{color:C.gold}}>🖥️</strong> "Installer"</span>
+                  </div>
+                  <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
+                    <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700 }}>3</span>
+                    <span>Sinon : menu <strong style={{color:C.gold}}>⋮</strong> → <strong style={{color:C.gold}}>"Installer Visites Rose-Marie..."</strong></span>
+                  </div>
+                  <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
+                    💡 L'app aura son raccourci dans le menu Démarrer (Windows) ou Launchpad (Mac).
+                  </div>
                 </div>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
-                  <span>Touche <strong style={{color:C.gold}}>"Ajouter à l'écran d'accueil"</strong> ou <strong style={{color:C.gold}}>"Installer l'application"</strong></span>
-                </div>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
-                  <span>Confirme en touchant <strong style={{color:C.gold}}>"Ajouter"</strong> ou <strong style={{color:C.gold}}>"Installer"</strong></span>
-                </div>
-                <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
-                  💡 Si tu utilises un autre navigateur (Firefox, Samsung Internet…), ouvre cette page dans <strong>Chrome</strong> pour de meilleurs résultats.
-                </div>
-              </div>
-            )}
+              )}
 
-            {device === "desktop" && (
-              <div style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6 }}>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>1</span>
-                  <span>Dans <strong style={{color:C.gold}}>Chrome</strong> ou <strong style={{color:C.gold}}>Edge</strong>, regarde à droite de la barre d'adresse</span>
-                </div>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>2</span>
-                  <span>Clique sur l'icône <strong style={{color:C.gold}}>⬇️</strong> ou <strong style={{color:C.gold}}>🖥️</strong> "Installer"</span>
-                </div>
-                <div style={{ display:"flex", gap:12, alignItems:"flex-start", marginBottom:14 }}>
-                  <span style={{ background:C.accent, color:"#fff", width:26, height:26, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.82rem", fontWeight:700, flexShrink:0 }}>3</span>
-                  <span>Sinon : menu <strong style={{color:C.gold}}>⋮</strong> → <strong style={{color:C.gold}}>"Installer Visites Rose-Marie..."</strong></span>
-                </div>
-                <div style={{ fontSize:"0.74rem", color:C.muted, marginTop:8, fontStyle:"italic", padding:"10px 12px", background:C.bg, borderRadius:6, border:`1px solid ${C.border}` }}>
-                  💡 L'app aura son raccourci dans le menu Démarrer (Windows) ou Launchpad (Mac).
-                </div>
-              </div>
-            )}
-
-            <button style={{ width:"100%", padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginTop:14 }}
-              onClick={() => setManualInstallOpen(false)}>
-              J'ai compris
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PHOTO */}
-      {photoOpen && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:150, padding:16, cursor:"pointer" }}
-          onClick={() => setPhotoOpen(false)}>
-          <div style={{ width:350, height:350, borderRadius:"50%", border:`4px solid ${C.gold}`, overflow:"hidden", boxShadow:"0 0 0 6px rgba(240,180,41,0.2), 0 20px 60px rgba(0,0,0,0.6)" }}>
-            <img src={mamanPhoto} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-          </div>
-        </div>
-      )}
-
-      {/* MODAL NUITÉE SUSPENDUE */}
-      {suspendedAlert && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
-          onClick={() => setSuspendedAlert(false)}>
-          <div style={{ background:C.card, border:`1px solid ${C.muted}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360, textAlign:"center" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:"2.4rem", marginBottom:10 }}>🌙</div>
-            <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 12px", color:"#fff" }}>Nuitées suspendues</h3>
-            <p style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6, margin:"0 0 8px" }}>
-              Les nuitées familiales sont <strong style={{color:C.gold}}>suspendues depuis le 15/05/2026</strong>.
-            </p>
-            <p style={{ fontSize:"0.8rem", color:C.muted, lineHeight:1.5, margin:"0 0 18px" }}>
-              Tu peux toujours consulter l'historique des nuits passées dans l'onglet 🌙 Nuits.
-            </p>
-            <button style={{ width:"100%", padding:"11px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.85rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
-              onClick={() => setSuspendedAlert(false)}>
-              Compris
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL PROCHAINE DISPO */}
-      {nextDispoModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
-          onClick={() => setNextDispoModal(null)}>
-          <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360, textAlign:"center" }}
-            onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:"2.4rem", marginBottom:8 }}>⚡</div>
-            <div style={{ fontSize:"0.72rem", color:C.gold, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:10 }}>
-              Prochaine disponibilité
-            </div>
-            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.3rem", fontWeight:700, color:"#fff", marginBottom:4, textTransform:"capitalize" }}>
-              {toFrLong(nextDispoModal.date)}
-            </div>
-            <div style={{ fontSize:"2rem", fontWeight:700, color:C.gold, fontFamily:"'Playfair Display',serif", margin:"8px 0 6px" }}>
-              {nextDispoModal.slot}
-            </div>
-            <div style={{ fontSize:"0.78rem", color:C.muted, marginBottom:20 }}>
-              Visite de 15-20 min · 2 personnes max
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => {
-                setCurrentDay(nextDispoModal.date);
-                setTab("slots");
-                setNextDispoModal(null);
-              }} style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
-                Voir le jour
-              </button>
-              <button onClick={bookFromNextDispo} style={{ flex:1.3, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:700, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
-                ✓ Réserver
+              <button style={{ width:"100%", padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginTop:14 }}
+                onClick={() => setManualInstallOpen(false)}>
+                J'ai compris
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* MODAL RÉSERVATION */}
-      {modal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
-          onClick={() => setModal(null)}>
-          <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360 }}
-            onClick={e => e.stopPropagation()}>
-            {!confirmed ? (
-              <>
-                <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", fontWeight:700, margin:"0 0 3px", color:"#fff" }}>
-                  {modal.type==="night" ? "🌙 Réserver une nuit" : `🕐 Visite ${modal.slot}`}
-                </div>
-                <p style={{ fontSize:"0.8rem", color:C.muted, margin:"0 0 16px" }}>
-                  {toFrLong(new Date(modal.date+"T12:00:00"))} · {modal.type==="night" ? "18h → 11h" : "15-20 min max"}
-                </p>
-                {[
-                  { ph:"Prénom *", val:prenom, set:setPrenom },
-                  { ph:"Nom", val:nom, set:setNom },
-                  { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
-                ].map(({ph,val,set,type="text"}) => (
-                  <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
-                    onKeyDown={e=>e.key==="Enter"&&handleBook()}
-                    style={{ width:"100%", padding:"10px 12px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, color:C.text, fontSize:"0.92rem", fontFamily:"'DM Sans',system-ui,sans-serif", boxSizing:"border-box", marginBottom:8, outline:"none" }}
-                  />
-                ))}
-                <div style={{ display:"flex", gap:8, marginTop:4 }}>
-                  <button style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
-                    onClick={() => setModal(null)}>Annuler</button>
-                  <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", opacity:(!prenom.trim()||saving)?0.5:1 }}
-                    onClick={handleBook} disabled={!prenom.trim()||saving}>
-                    {saving ? "Envoi…" : "Confirmer"}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div style={{ textAlign:"center", padding:"8px 0" }}>
-                  <div style={{ fontSize:"2.4rem", marginBottom:6 }}>🎉</div>
-                  <div style={{ fontSize:"1.05rem", fontWeight:700, color:C.success, margin:"0 0 4px" }}>Merci {confirmed.prenom} !</div>
-                  <p style={{ fontSize:"0.8rem", color:C.muted, margin:"0 0 12px" }}>Ta visite est enregistrée.<br/>Rose-Marie sera heureuse de te voir 💛</p>
-                </div>
-                <a href={confirmed.gcal} target="_blank" rel="noopener noreferrer"
-                  style={{ display:"block", padding:"11px 0", background:"rgba(52,168,83,0.15)", color:"#3da85e", border:"1px solid rgba(52,168,83,0.4)", borderRadius:8, textAlign:"center", textDecoration:"none", fontWeight:600, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginBottom:8 }}>
-                  📅 Ajouter à Google Calendar
-                </a>
-                <button style={{ width:"100%", padding:10, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
-                  onClick={() => setModal(null)}>Fermer</button>
-              </>
-            )}
+        {/* MODAL PHOTO */}
+        {photoOpen && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:150, padding:16, cursor:"pointer" }}
+            onClick={() => setPhotoOpen(false)}>
+            <div style={{ width:350, height:350, borderRadius:"50%", border:`4px solid ${C.gold}`, overflow:"hidden", boxShadow:"0 0 0 6px rgba(240,180,41,0.2), 0 20px 60px rgba(0,0,0,0.6)" }}>
+              <img src={mamanPhoto} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+            </div>
           </div>
-        </div>
-      )}
-      
-      </div>
+        )}
+
+        {/* MODAL NUITÉE SUSPENDUE */}
+        {suspendedAlert && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
+            onClick={() => setSuspendedAlert(false)}>
+            <div style={{ background:C.card, border:`1px solid ${C.muted}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360, textAlign:"center" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize:"2.4rem", marginBottom:10 }}>🌙</div>
+              <h3 style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", margin:"0 0 12px", color:"#fff" }}>Nuitées suspendues</h3>
+              <p style={{ fontSize:"0.86rem", color:C.text, lineHeight:1.6, margin:"0 0 8px" }}>
+                Les nuitées familiales sont <strong style={{color:C.gold}}>suspendues depuis le 15/05/2026</strong>.
+              </p>
+              <p style={{ fontSize:"0.8rem", color:C.muted, lineHeight:1.5, margin:"0 0 18px" }}>
+                Tu peux toujours consulter l'historique des nuits passées dans l'onglet 🌙 Nuits.
+              </p>
+              <button style={{ width:"100%", padding:"11px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.85rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
+                onClick={() => setSuspendedAlert(false)}>
+                Compris
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL PROCHAINE DISPO */}
+        {nextDispoModal && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
+            onClick={() => setNextDispoModal(null)}>
+            <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360, textAlign:"center" }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ fontSize:"2.4rem", marginBottom:8 }}>⚡</div>
+              <div style={{ fontSize:"0.72rem", color:C.gold, letterSpacing:"0.1em", textTransform:"uppercase", fontWeight:600, marginBottom:10 }}>
+                Prochaine disponibilité
+              </div>
+              <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.3rem", fontWeight:700, color:"#fff", marginBottom:4, textTransform:"capitalize" }}>
+                {toFrLong(nextDispoModal.date)}
+              </div>
+              <div style={{ fontSize:"2rem", fontWeight:700, color:C.gold, fontFamily:"'Playfair Display',serif", margin:"8px 0 6px" }}>
+                {nextDispoModal.slot}
+              </div>
+              <div style={{ fontSize:"0.78rem", color:C.muted, marginBottom:20 }}>
+                Visite de 15-20 min · 2 personnes max
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => {
+                  setCurrentDay(nextDispoModal.date);
+                  setTab("slots");
+                  setNextDispoModal(null);
+                }} style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                  Voir le jour
+                </button>
+                <button onClick={bookFromNextDispo} style={{ flex:1.3, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:700, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                  ✓ Réserver
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL RÉSERVATION */}
+        {modal && (
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:16 }}
+            onClick={() => setModal(null)}>
+            <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"24px 20px", width:"100%", maxWidth:360 }}
+              onClick={e => e.stopPropagation()}>
+              {!confirmed ? (
+                <>
+                  <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.15rem", fontWeight:700, margin:"0 0 3px", color:"#fff" }}>
+                    {modal.type==="night" ? "🌙 Réserver une nuit" : `🕐 Visite ${modal.slot}`}
+                  </div>
+                  <p style={{ fontSize:"0.8rem", color:C.muted, margin:"0 0 16px" }}>
+                    {toFrLong(new Date(modal.date+"T12:00:00"))} · {modal.type==="night" ? "18h → 11h" : "15-20 min max"}
+                  </p>
+                  {[
+                    { ph:"Prénom *", val:prenom, set:setPrenom },
+                    { ph:"Nom", val:nom, set:setNom },
+                    { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
+                  ].map(({ph,val,set,type="text"}) => (
+                    <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
+                      onKeyDown={e=>e.key==="Enter"&&handleBook()}
+                      style={{ width:"100%", padding:"10px 12px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, color:C.text, fontSize:"0.92rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginBottom:8 }}
+                    />
+                  ))}
+                  <div style={{ display:"flex", gap:8, marginTop:4 }}>
+                    <button style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
+                      onClick={() => setModal(null)}>Annuler</button>
+                    <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
+                      onClick={handleBook} disabled={!prenom.trim()||saving}>
+                      {saving ? "Envoi…" : "Confirmer"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div style={{ textAlign:"center", padding:"8px 0" }}>
+                    <div style={{ fontSize:"2.4rem", marginBottom:6 }}>🎉</div>
+                    <div style={{ fontSize:"1.05rem", fontWeight:700, color:C.success, margin:"0 0 4px" }}>Merci {confirmed.prenom} !</div>
+                    <p style={{ fontSize:"0.8rem", color:C.muted, margin:"0 0 12px" }}>Ta visite est enregistrée.<br/>Rose-Marie sera heureuse de te voir 💛</p>
+                  </div>
+                  <a href={confirmed.gcal} target="_blank" rel="noopener noreferrer"
+                    style={{ display:"block", padding:"11px 0", background:"rgba(52,168,83,0.15)", color:"#3da85e", border:"1px solid rgba(52,168,83,0.4)", borderRadius:8, textAlign:"center", textDecoration:"none", fontWeight:600, fontSize:"0.82rem", marginBottom:10 }}>
+                    📅 Ajouter à Google Calendar
+                  </a>
+                  <button style={{ width:"100%", padding:10, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
+                    onClick={() => setModal(null)}>Fermer</button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+
       </div>
 
       {toast && (
-        <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", background:C.success, color:"#fff", padding:"11px 20px", borderRadius:8, fontWeight:600, fontSize:"0.86rem", zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(0,0,0,0.4)" }}>
+        <div style={{ position:"fixed", bottom:24, left:"50%", transform:"translateX(-50%)", background:C.success, color:"#fff", padding:"11px 20px", borderRadius:8, fontWeight:600, fontSize:"0.8rem", zIndex:200, whiteSpace:"nowrap", boxShadow:"0 4px 20px rgba(0,0,0,0.4)" }}>
           {toast}
         </div>
       )}
