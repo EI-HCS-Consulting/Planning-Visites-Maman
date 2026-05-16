@@ -10,7 +10,7 @@ const HOSPITAL = {
   name: "Hôpital Michallon · CHU Grenoble Alpes",
   address: "Bd de la Chantourne, 38700 La Tronche",
   room: "Neurologie | Secteur C | Chambre 140",
-  mapsUrl: "https://maps.google.com/?q=Hôpital+Michallon+CHU+Grenoble+Alpes+La+Tronche",
+  mapsUrl: https://maps.app.goo.gl/uPXWyKzcTGMKCnNG7,
 };
 
 const APP_URL = "https://planning-visites-maman.vercel.app";
