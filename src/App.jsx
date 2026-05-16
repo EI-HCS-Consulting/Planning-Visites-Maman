@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import mamanPhoto from "./assets/maman.png";
+import iconSans from "./assets/icon-sans-512.png";
 
 const SLOTS = ["12:00", "14:00", "16:00", "18:00"];
 const START_DATE = new Date("2026-05-12T00:00:00");
@@ -302,11 +303,45 @@ export default function App() {
       {/* HEADER */}
       <div style={{ background:"linear-gradient(160deg,#0D1B2E 0%,#1F3864 100%)", borderBottom:`1px solid ${C.border}`, padding:"24px 20px 0", textAlign:"center" }}>
         <div
-          onClick={() => setPhotoOpen(true)}
-          style={{ width:80, height:80, borderRadius:"50%", border:`3px solid ${C.gold}`, overflow:"hidden", margin:"0 auto 12px", boxShadow:"0 0 0 4px rgba(240,180,41,0.15)", cursor:"pointer" }}
-        >
-          <img src={mamanPhoto} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-        </div>
+  onClick={() => setPhotoOpen(true)}
+  style={{
+    position:"relative",
+    width:80,
+    height:80,
+    borderRadius:"50%",
+    overflow:"hidden",
+    margin:"0 auto 12px",
+    border:`3px solid ${C.gold}`,
+  }}
+>
+  {/* Photo patient */}
+  <img
+    src={mamanPhoto}
+    alt="Patient"
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"cover",
+      position:"absolute",
+      inset:0,
+    }}
+  />
+
+  {/* Logo overlay */}
+  <img
+    src={iconSans}
+    alt="Logo"
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"contain",
+      position:"absolute",
+      inset:0,
+      zIndex:2,
+      transform:"scale(0.82)",
+    }}
+  />
+</div>
         <h1 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:"1.7rem", fontWeight:700, color:"#fff", margin:"0 0 3px" }}>
           Visites Rose-Marie
         </h1>
@@ -744,11 +779,48 @@ export default function App() {
 
             {/* Aperçu visuel de ce qui va se passer */}
             <div style={{ background:"rgba(46,117,182,0.08)", border:`1px solid rgba(46,117,182,0.25)`, borderRadius:12, padding:"14px 16px", display:"flex", gap:14, alignItems:"center" }}>
-              <div style={{ width:54, height:54, borderRadius:14, overflow:"hidden", border:`2px solid ${C.gold}`, flexShrink:0, background:C.bg }}>
-                <img src={mamanPhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-              </div>
+              <div
+  style={{
+    position:"relative",
+    width:54,
+    height:54,
+    borderRadius:14,
+    overflow:"hidden",
+    border:`2px solid ${C.gold}`,
+    flexShrink:0,
+    background:C.bg
+  }}
+>
+  {/* Photo patient */}
+  <img
+    src={mamanPhoto}
+    alt=""
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"cover",
+      position:"absolute",
+      inset:0,
+    }}
+  />
+
+  {/* Overlay logo */}
+  <img
+    src={iconSans}
+    alt=""
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"contain",
+      position:"absolute",
+      inset:0,
+      zIndex:2,
+      transform:"scale(0.82)",
+    }}
+  />
+</div>
               <div>
-                <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Rose-Marie</div>
+                <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Planning Visites</div>
                 <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:2 }}>
                   L'icône qui apparaîtra sur ton écran d'accueil ↑
                 </div>
