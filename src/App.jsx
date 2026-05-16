@@ -1064,6 +1064,10 @@ export default function App() {
                 <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Planning Visites</div>
                 <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:2 }}>
                   L'icône qui apparaîtra sur ton écran d'accueil ↑
+                  Pour tout problème technique, tu peux contacter Guillaume au </span>
+              <a href="tel:0617927600" style={{ fontSize:"0.72rem", color:C.accent, textDecoration:"none", fontWeight:600 }}>
+                06.17.92.76.00
+              </a>
                 </div>
               </div>
             </div>
