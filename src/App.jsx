@@ -825,9 +825,12 @@ export default function App() {
                       <div style={{ fontSize:"0.82rem", fontWeight:600, color:C.muted }}>Nuitée suspendue</div>
                       <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:2, fontStyle:"italic" }}>Plus de réservation possible</div>
                       {occ && (
-                        <div style={{ fontSize:"0.75rem", color:C.success, marginTop:4, display:"flex", alignItems:"center" }}>
+                        <div style={{ fontSize:"0.75rem", color:C.success, marginTop:4, display:"flex", alignItems:"center", gap:8 }}>
                           ● {occ.prenom} {occ.nom} (historique)
-                          <EditBtn reservation={occ} />
+                          <button onClick={(e) => { e.stopPropagation(); setPinModal(occ); }}
+                            style={{ padding:"2px 8px", background:C.orange, color:"#fff", border:"none", borderRadius:5, cursor:"pointer", fontSize:"0.7rem", fontWeight:600 }}>
+                            ✏️
+                          </button>
                         </div>
                       )}
                     </div>
