@@ -199,6 +199,13 @@ function PinModal({ reservation, onClose, onSuccess }) {
                 Valider
               </button>
             </div>
+
+            <div style={{ textAlign:"center", marginTop:14 }}>
+              <span style={{ fontSize:"0.72rem", color:C.muted }}>Code oublié ? Contacte Guillaume au </span>
+              <a href="tel:0617927600" style={{ fontSize:"0.72rem", color:C.accent, textDecoration:"none", fontWeight:600 }}>
+                06.17.92.76.00
+              </a>
+            </div>
           </>
         ) : (
           <>
@@ -579,14 +586,20 @@ export default function App() {
   // Gestion des actions PIN validé — reçoit { action, id, reservation }
   async function handlePinAction({ action, id, reservation }) {
     if (action === "delete") {
-      const { error } = await supabase.from("reservations").delete().eq("id", id);
-      if (error) { showToast("Erreur suppression : "+error.message); return; }
+      const { error, count } = await supabase
+        .from("reservations")
+        .delete({ count: "exact" })
+        .eq("id", id);
+      if (error) { showToast("Erreur suppression : " + error.message); return; }
+      if (count === 0) {
+        showToast("⚠️ Suppression bloquée — vérifie les policies RLS dans Supabase (autoriser DELETE sans auth)");
+        return;
+      }
       showToast("Réservation annulée ✓");
       setPinModal(null);
       load();
     } else if (action === "edit") {
       setPinModal(null);
-      // On ouvre le modal d'édition étendu (date + créneau modifiables)
       setEditModal(reservation);
     }
   }
@@ -1064,14 +1077,18 @@ export default function App() {
             reservations={reservations}
             onClose={() => setEditModal(null)}
             onSave={async (updates) => {
-              const { error } = await supabase.from("reservations").update({
+              const { error, count } = await supabase.from("reservations").update({
                 date: updates.date,
                 creneau: updates.creneau,
                 prenom: updates.prenom.trim(),
                 nom: updates.nom.trim(),
                 telephone: updates.telephone.trim(),
-              }).eq("id", editModal.id);
+              }, { count: "exact" }).eq("id", editModal.id);
               if (error) { showToast("Erreur : "+error.message); return; }
+              if (count === 0) {
+                showToast("⚠️ Modification bloquée — vérifie les policies RLS dans Supabase (autoriser UPDATE sans auth)");
+                return;
+              }
               showToast("Réservation modifiée ✓");
               setEditModal(null);
               load();
