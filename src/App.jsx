@@ -666,7 +666,7 @@ export default function App() {
           onClick={() => setPhotoOpen(true)}
           style={{ position:"relative", width:135, height:135, borderRadius:"50%", overflow:"hidden", margin:"4px auto 6px", cursor:"pointer" }}
         >
-          <img src={mamanPhoto} alt="Patient" style={{ width:"45%", height:"45%", objectFit:"cover", position:"absolute", top:"45%", left:"50%", transform:"translate(-50%, -50%)", borderRadius:"50%", zIndex:1 }} />
+          <img src={mamanPhoto} alt="Patient" style={{ width:"50%", height:"50%", objectFit:"cover", position:"absolute", top:"45%", left:"50%", transform:"translate(-50%, -50%)", borderRadius:"50%", zIndex:1 }} />
           <img src={iconSans} alt="Logo" style={{ width:"100%", height:"100%", objectFit:"contain", position:"absolute", inset:0, zIndex:2 }} />
         </div>
         <h1 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:"1.7rem", fontWeight:700, color:"#fff", margin:"0 0 3px" }}>
