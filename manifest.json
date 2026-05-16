@@ -1,6 +1,6 @@
 {
-  "name": "Visites Rose-Marie",
-  "short_name": "Rose-Marie",
+  "name": "Planning Visites",
+  "short_name": "Planning",
   "description": "Planning des visites à l'hôpital Michallon",
   "start_url": "/",
   "display": "standalone",
@@ -15,7 +15,7 @@
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icon-sans-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
