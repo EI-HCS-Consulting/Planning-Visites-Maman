@@ -306,8 +306,8 @@ export default function App() {
   onClick={() => setPhotoOpen(true)}
   style={{
     position:"relative",
-    width:96,
-    height:96,
+    width:116,
+    height:116,
     borderRadius:"50%",
     overflow:"hidden",
     margin:"10px auto 12px",
