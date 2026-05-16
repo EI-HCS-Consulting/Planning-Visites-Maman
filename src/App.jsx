@@ -311,7 +311,7 @@ export default function App() {
     borderRadius:"50%",
     overflow:"hidden",
     margin:"0 auto 12px",
-    border:`3px solid ${C.gold}`,
+    
   }}
 >
   {/* Photo patient */}
@@ -338,7 +338,7 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(0.82)",
+      transform:"scale(1.05)",
     }}
   />
 </div>
@@ -392,7 +392,6 @@ export default function App() {
               background:`linear-gradient(135deg, ${C.accent}, #1a5a9e)`,
               color:"#fff", border:"none", borderRadius:10, cursor:"pointer",
               fontWeight:700, fontSize:"0.92rem", fontFamily:"'DM Sans',system-ui,sans-serif",
-              boxShadow:"0 4px 15px rgba(46,117,182,0.4)",
             }}>⚡ Prochaine disponibilité</button>
 
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
@@ -815,7 +814,7 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(0.82)",
+      transform:"scale(1.05)",
     }}
   />
 </div>
