@@ -440,12 +440,12 @@ function SouvenirsTab({ showToast }) {
           const parts = f.name.replace(/\.[^.]+$/, "").split("_");
           const ts = parts[0];
           const prenomVal = parts[1] || "";
-          const legendeVal = parts.slice(2).join("_") || "";
+          const legendeVal = parts.slice(2).join(" ") || "";
           return {
             name: f.name,
             url: urlData.publicUrl,
-            prenom: decodeURIComponent(prenomVal),
-            legende: decodeURIComponent(legendeVal),
+            prenom: prenomVal,
+            legende: legendeVal,
             date: new Date(parseInt(ts)),
           };
         });
@@ -496,9 +496,10 @@ function SouvenirsTab({ showToast }) {
       const compressed = await compressImage(pendingFile);
       setUploadProgress(60);
       const ts = Date.now();
-      const prenomClean = encodeURIComponent(prenom.trim());
-      const legendeClean = encodeURIComponent(legende.trim());
-      const fileName = `${ts}_${prenomClean}_${legendeClean}.jpg`;
+      const sanitize = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const prenomClean = sanitize(prenom.trim()) || "Anonyme";
+      const legendeClean = sanitize(legende.trim());
+      const fileName = legendeClean ? `${ts}_${prenomClean}_${legendeClean}.jpg` : `${ts}_${prenomClean}.jpg`;
       const { error } = await supabase.storage.from("souvenirs").upload(fileName, compressed, {
         contentType: "image/jpeg", cacheControl: "3600",
       });
@@ -930,7 +931,7 @@ export default function App() {
         </a>
 
         <div style={{ display:"flex", justifyContent:"center", borderTop:`1px solid ${C.border}`, marginTop:6, flexWrap: isMobile ? "wrap" : "nowrap", gap: isMobile ? 0 : 4 }}>
-          {TABS.map(([id,label]) => (
+          {TABS.filter(([id]) => id !== "souvenirs").map(([id,label]) => (
             <button key={id} onClick={() => setTab(id)} style={{
               flex: isMobile ? "1 1 33%" : "0 0 auto",
               padding: isMobile ? "10px 4px" : "12px 14px",
@@ -947,6 +948,25 @@ export default function App() {
               whiteSpace:"nowrap",
             }}>{label}</button>
           ))}
+        </div>
+        {/* Onglet Souvenirs — ligne séparée, aligné sous Créneaux→Partager */}
+        <div style={{ borderTop:`1px solid ${C.border}`, display:"flex", justifyContent:"center" }}>
+          <div style={{ display:"flex", flex: isMobile ? "0 0 66.66%" : "0 0 auto" }}>
+            <button onClick={() => setTab("souvenirs")} style={{
+              padding: isMobile ? "10px 0" : "12px 28px",
+              width: isMobile ? "100%" : "auto",
+              background: tab==="souvenirs" ? "rgba(46,117,182,0.15)" : "transparent",
+              color: tab==="souvenirs" ? "#fff" : C.muted,
+              border:"none",
+              borderBottom: tab==="souvenirs" ? `2px solid ${C.accent}` : "2px solid transparent",
+              cursor:"pointer",
+              fontSize: isMobile ? "0.65rem" : "0.7rem",
+              fontWeight:700,
+              letterSpacing:"0.06em",
+              textTransform:"uppercase",
+              fontFamily:"'DM Sans',system-ui,sans-serif",
+            }}>📸 Souvenirs</button>
+          </div>
         </div>
       </div>
 
