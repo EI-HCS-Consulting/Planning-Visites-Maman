@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabase.js";
 import mamanPhoto from "./assets/maman.png";
 import iconSans from "./assets/icon-sans-512.png";
@@ -287,7 +287,7 @@ function EditFullModal({ reservation, reservations, onClose, onSave }) {
     );
   }
 
-  const canSave = prenom.trim() && nom.trim() && selDate && (isNight ? !nightOccupied() : !!selSlot);
+  const canSave = prenom.trim() && selDate && (isNight ? !nightOccupied() : !!selSlot);
 
   async function handleSave() {
     if (!canSave) return;
@@ -388,7 +388,7 @@ function EditFullModal({ reservation, reservations, onClose, onSave }) {
         </div>
         {[
           { ph:"Prénom *", val:prenom, set:setPrenom },
-          { ph:"Nom *", val:nom, set:setNom },
+          { ph:"Nom", val:nom, set:setNom },
           { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
         ].map(({ph,val,set,type="text"}) => (
           <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
@@ -405,6 +405,254 @@ function EditFullModal({ reservation, reservations, onClose, onSave }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Composant Souvenirs ──────────────────────────────────────────────────────
+function SouvenirsTab({ showToast }) {
+  const [photos, setPhotos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [selected, setSelected] = useState(new Set());
+  const [selectMode, setSelectMode] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
+  const [prenom, setPrenom] = useState("");
+  const [legende, setLegende] = useState("");
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null);
+  const [pendingPreview, setPendingPreview] = useState(null);
+  const fileInputRef = useRef(null);
+
+  async function loadPhotos() {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.storage.from("souvenirs").list("", {
+        limit: 200,
+        sortBy: { column: "created_at", order: "desc" },
+      });
+      if (error) throw error;
+      const photosWithUrls = (data || [])
+        .filter(f => f.name !== ".emptyFolderPlaceholder")
+        .map(f => {
+          const { data: urlData } = supabase.storage.from("souvenirs").getPublicUrl(f.name);
+          const parts = f.name.replace(/\.[^.]+$/, "").split("_");
+          const ts = parts[0];
+          const prenomVal = parts[1] || "";
+          const legendeVal = parts.slice(2).join("_") || "";
+          return {
+            name: f.name,
+            url: urlData.publicUrl,
+            prenom: decodeURIComponent(prenomVal),
+            legende: decodeURIComponent(legendeVal),
+            date: new Date(parseInt(ts)),
+          };
+        });
+      setPhotos(photosWithUrls);
+    } catch (e) { showToast("Erreur chargement photos : " + e.message); }
+    setLoading(false);
+  }
+
+  useEffect(() => { loadPhotos(); }, []);
+
+  async function compressImage(file) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          canvas.width = w; canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          canvas.toBlob((blob) => resolve(blob), "image/jpeg", 0.82);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleFileSelect(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setPendingFile(file);
+    setPendingPreview(URL.createObjectURL(file));
+    setShowUploadModal(true);
+    e.target.value = "";
+  }
+
+  async function handleUpload() {
+    if (!pendingFile || !prenom.trim()) return;
+    setUploading(true); setUploadProgress(10);
+    try {
+      setUploadProgress(30);
+      const compressed = await compressImage(pendingFile);
+      setUploadProgress(60);
+      const ts = Date.now();
+      const prenomClean = encodeURIComponent(prenom.trim());
+      const legendeClean = encodeURIComponent(legende.trim());
+      const fileName = `${ts}_${prenomClean}_${legendeClean}.jpg`;
+      const { error } = await supabase.storage.from("souvenirs").upload(fileName, compressed, {
+        contentType: "image/jpeg", cacheControl: "3600",
+      });
+      if (error) throw error;
+      setUploadProgress(100);
+      showToast("Photo ajoutée ✓");
+      setShowUploadModal(false); setPendingFile(null); setPendingPreview(null);
+      setPrenom(""); setLegende("");
+      loadPhotos();
+    } catch (e) { showToast("Erreur upload : " + e.message); }
+    setUploading(false); setUploadProgress(0);
+  }
+
+  function toggleSelect(name) {
+    setSelected(prev => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n; });
+  }
+
+  async function downloadSelected() {
+    for (const photo of photos.filter(p => selected.has(p.name))) {
+      const blob = await (await fetch(photo.url)).blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `souvenir_${photo.prenom}_${photo.date.toLocaleDateString("fr-FR").replace(/\//g,"-")}.jpg`;
+      a.click();
+      URL.revokeObjectURL(url);
+      await new Promise(r => setTimeout(r, 400));
+    }
+    setSelectMode(false); setSelected(new Set());
+  }
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:8, marginBottom:16 }}>
+        <button onClick={() => fileInputRef.current?.click()} style={{
+          flex:1, padding:"13px 0", background:`linear-gradient(135deg, ${C.accent}, #1a5a9e)`,
+          color:"#fff", border:"none", borderRadius:10, cursor:"pointer",
+          fontWeight:700, fontSize:"0.88rem", fontFamily:"'DM Sans',system-ui,sans-serif",
+        }}>📸 Ajouter une photo</button>
+        <button onClick={() => { setSelectMode(!selectMode); setSelected(new Set()); }} style={{
+          padding:"13px 14px", background: selectMode ? C.orange : "transparent",
+          color: selectMode ? "#fff" : C.muted, border:`1px solid ${selectMode ? C.orange : C.border}`,
+          borderRadius:10, cursor:"pointer", fontWeight:600, fontSize:"0.82rem",
+          fontFamily:"'DM Sans',system-ui,sans-serif",
+        }}>{selectMode ? "✕ Annuler" : "☑️ Sélection"}</button>
+      </div>
+
+      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={handleFileSelect} />
+
+      {selectMode && selected.size > 0 && (
+        <button onClick={downloadSelected} style={{
+          width:"100%", padding:"12px", marginBottom:14,
+          background:C.success, color:"#fff", border:"none", borderRadius:10,
+          cursor:"pointer", fontWeight:700, fontSize:"0.88rem", fontFamily:"'DM Sans',system-ui,sans-serif",
+        }}>⬇️ Télécharger {selected.size} photo{selected.size > 1 ? "s" : ""}</button>
+      )}
+
+      {loading ? (
+        <div style={{ textAlign:"center", color:C.muted, padding:"40px 0", fontSize:"0.85rem" }}>Chargement des souvenirs…</div>
+      ) : photos.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"50px 20px" }}>
+          <div style={{ fontSize:"3rem", marginBottom:12 }}>📷</div>
+          <div style={{ color:C.muted, fontSize:"0.88rem", lineHeight:1.6 }}>
+            Aucune photo pour l'instant.<br/>Sois le premier à partager un souvenir 💛
+          </div>
+        </div>
+      ) : (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+          {photos.map(photo => {
+            const isSel = selected.has(photo.name);
+            return (
+              <div key={photo.name} onClick={() => selectMode ? toggleSelect(photo.name) : setLightbox(photo)}
+                style={{ position:"relative", borderRadius:10, overflow:"hidden", border:`2px solid ${isSel ? C.gold : "transparent"}`, cursor:"pointer", aspectRatio:"1", background:C.card, transition:"border-color 0.15s" }}>
+                <img src={photo.url} alt={photo.legende || "Souvenir"} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
+                {isSel && (
+                  <div style={{ position:"absolute", top:6, right:6, width:24, height:24, borderRadius:"50%", background:C.gold, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"0.75rem", fontWeight:700, color:"#0D1B2E" }}>✓</div>
+                )}
+                <div style={{ position:"absolute", bottom:0, left:0, right:0, background:"linear-gradient(transparent,rgba(0,0,0,0.72))", padding:"20px 8px 8px" }}>
+                  {photo.prenom && <div style={{ fontSize:"0.72rem", fontWeight:700, color:"#fff" }}>{photo.prenom}</div>}
+                  {photo.legende && <div style={{ fontSize:"0.65rem", color:"rgba(255,255,255,0.75)", marginTop:1, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{photo.legende}</div>}
+                  <div style={{ fontSize:"0.6rem", color:"rgba(255,255,255,0.5)", marginTop:2 }}>{photo.date.toLocaleDateString("fr-FR", { day:"numeric", month:"short" })}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:300, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:16 }}
+          onClick={() => setLightbox(null)}>
+          <img src={lightbox.url} alt={lightbox.legende} style={{ maxWidth:"100%", maxHeight:"72vh", borderRadius:10, objectFit:"contain" }} onClick={e => e.stopPropagation()} />
+          <div style={{ marginTop:14, textAlign:"center" }} onClick={e => e.stopPropagation()}>
+            {lightbox.prenom && <div style={{ color:"#fff", fontWeight:600, fontSize:"0.9rem" }}>{lightbox.prenom}</div>}
+            {lightbox.legende && <div style={{ color:"rgba(255,255,255,0.7)", fontSize:"0.8rem", marginTop:3 }}>{lightbox.legende}</div>}
+            <div style={{ color:"rgba(255,255,255,0.4)", fontSize:"0.72rem", marginTop:4 }}>{lightbox.date.toLocaleDateString("fr-FR", { weekday:"long", day:"numeric", month:"long", year:"numeric" })}</div>
+            <button onClick={async () => {
+              const blob = await (await fetch(lightbox.url)).blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement("a"); a.href = url; a.download = `souvenir_${lightbox.prenom}.jpg`; a.click(); URL.revokeObjectURL(url);
+            }} style={{ marginTop:12, padding:"10px 24px", background:C.accent, color:"#fff", border:"none", borderRadius:8, cursor:"pointer", fontWeight:600, fontSize:"0.82rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+              ⬇️ Télécharger
+            </button>
+          </div>
+          <button style={{ position:"absolute", top:16, right:16, background:"rgba(255,255,255,0.15)", border:"none", color:"#fff", width:36, height:36, borderRadius:"50%", cursor:"pointer", fontSize:"1.1rem" }} onClick={() => setLightbox(null)}>✕</button>
+        </div>
+      )}
+
+      {/* Modal upload */}
+      {showUploadModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:250, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+          onClick={() => !uploading && setShowUploadModal(false)}>
+          <div style={{ background:C.card, border:`1px solid ${C.accent}`, borderRadius:14, padding:"22px 18px", width:"100%", maxWidth:360 }}
+            onClick={e => e.stopPropagation()}>
+            <div style={{ fontFamily:"'Playfair Display',serif", fontSize:"1.05rem", fontWeight:700, color:"#fff", marginBottom:14 }}>📸 Ajouter un souvenir</div>
+            {pendingPreview && (
+              <div style={{ borderRadius:10, overflow:"hidden", marginBottom:14, aspectRatio:"4/3" }}>
+                <img src={pendingPreview} alt="Aperçu" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
+              </div>
+            )}
+            <div style={{ fontSize:"0.72rem", color:C.success, marginBottom:10, display:"flex", alignItems:"center", gap:6 }}>
+              ✓ Photo compressée automatiquement avant envoi
+            </div>
+            {[
+              { ph:"Ton prénom *", val:prenom, set:setPrenom },
+              { ph:"Une légende (optionnel)", val:legende, set:setLegende },
+            ].map(({ ph, val, set }) => (
+              <input key={ph} placeholder={ph} value={val} onChange={e => set(e.target.value)}
+                style={{ width:"100%", padding:"10px 12px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, color:C.text, fontSize:"0.9rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginBottom:8, boxSizing:"border-box" }} />
+            ))}
+            {uploading && (
+              <div style={{ marginBottom:12 }}>
+                <div style={{ height:4, background:C.border, borderRadius:2, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${uploadProgress}%`, background:C.accent, borderRadius:2, transition:"width 0.3s" }} />
+                </div>
+                <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:4, textAlign:"center" }}>
+                  {uploadProgress < 50 ? "Compression en cours…" : "Envoi en cours…"}
+                </div>
+              </div>
+            )}
+            <div style={{ display:"flex", gap:8, marginTop:6 }}>
+              <button onClick={() => { setShowUploadModal(false); setPendingFile(null); setPendingPreview(null); }} disabled={uploading}
+                style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                Annuler
+              </button>
+              <button onClick={handleUpload} disabled={!prenom.trim() || uploading}
+                style={{ flex:1.3, padding:11, background: prenom.trim() && !uploading ? C.accent : "rgba(46,117,182,0.3)", color:"#fff", border:"none", borderRadius:8, cursor: prenom.trim() && !uploading ? "pointer" : "default", fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}>
+                {uploading ? "Envoi…" : "✓ Publier"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -530,7 +778,7 @@ export default function App() {
   }
 
   async function handleBook() {
-    if (!prenom.trim() || !nom.trim() || (!editingId && userPin.length < 4)) return;
+    if (!prenom.trim() || (!editingId && userPin.length < 4)) return;
     setSaving(true);
     try {
       if (editingId) {
@@ -644,6 +892,7 @@ export default function App() {
     ["calendar","📅 Calendrier"],
     ["slots","🕐 Créneaux"],
     ["nights","🌙 Nuits"],
+    ["souvenirs","📸 Souvenirs"],
     ["info","ℹ️ Infos"],
     ["share","📱 Partager"],
     ["install","⬇️ Installer"],
@@ -959,6 +1208,11 @@ export default function App() {
           </div>
         )}
 
+        {/* ===== SOUVENIRS ===== */}
+        {tab === "souvenirs" && (
+          <SouvenirsTab showToast={showToast} />
+        )}
+
         {/* ===== INFOS ===== */}
         {tab === "info" && (
           <div>
@@ -1271,7 +1525,7 @@ export default function App() {
                   {/* Champs infos */}
                   {[
                     { ph:"Prénom *", val:prenom, set:setPrenom },
-                    { ph:"Nom *", val:nom, set:setNom },
+                    { ph:"Nom", val:nom, set:setNom },
                     { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
                   ].map(({ph,val,set,type="text"}) => (
                     <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
@@ -1329,8 +1583,8 @@ export default function App() {
                   <div style={{ display:"flex", gap:8, marginTop:14 }}>
                     <button style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
                       onClick={() => setModal(null)}>Annuler</button>
-                    <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", opacity: (!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)) ? 0.5 : 1, cursor: (!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)) ? "default" : "pointer" }}
-                      onClick={handleBook} disabled={!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)}>
+                    <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", opacity: (!prenom.trim() || saving || (!editingId && userPin.length < 4)) ? 0.5 : 1, cursor: (!prenom.trim() || saving || (!editingId && userPin.length < 4)) ? "default" : "pointer" }}
+                      onClick={handleBook} disabled={!prenom.trim() || saving || (!editingId && userPin.length < 4)}>
                       {saving ? "Envoi…" : editingId ? "Enregistrer" : "Confirmer"}
                     </button>
                   </div>
