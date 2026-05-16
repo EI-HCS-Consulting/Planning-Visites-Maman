@@ -7,7 +7,7 @@ const START_DATE = new Date("2026-05-12T00:00:00");
 const NIGHT_SUSPENDED_FROM = new Date("2026-05-15T00:00:00");
 
 const HOSPITAL = {
-  name: "Hôpital Michallon · CHU Grenoble Alpes",
+  name: "Hôpital Michallon · CHU Grenoble Alpes · Pavillon de Neurologie",
   address: "Bd de la Chantourne, 38700 La Tronche",
   room: "Neurologie | Secteur C | Chambre 140",
   mapsUrl: "https://maps.app.goo.gl/uPXWyKzcTGMKCnNG7",
