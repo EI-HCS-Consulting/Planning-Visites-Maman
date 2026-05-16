@@ -1,16 +1,17 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabase.js";
 import mamanPhoto from "./assets/maman.png";
+import iconSans from "./assets/icon-sans-512.png";
 
 const SLOTS = ["12:00", "14:00", "16:00", "18:00"];
 const START_DATE = new Date("2026-05-12T00:00:00");
 const NIGHT_SUSPENDED_FROM = new Date("2026-05-15T00:00:00");
 
 const HOSPITAL = {
-  name: "Hôpital Michallon · CHU Grenoble Alpes",
+  name: "Hôpital Michallon · CHU Grenoble Alpes · Pavillon de Neurologie",
   address: "Bd de la Chantourne, 38700 La Tronche",
   room: "Neurologie | Secteur C | Chambre 140",
-  mapsUrl: "https://maps.google.com/?q=Hôpital+Michallon+CHU+Grenoble+Alpes+La+Tronche",
+  mapsUrl: "https://maps.app.goo.gl/uPXWyKzcTGMKCnNG7",
 };
 
 const APP_URL = "https://planning-visites-maman.vercel.app";
@@ -302,11 +303,48 @@ export default function App() {
       {/* HEADER */}
       <div style={{ background:"linear-gradient(160deg,#0D1B2E 0%,#1F3864 100%)", borderBottom:`1px solid ${C.border}`, padding:"24px 20px 0", textAlign:"center" }}>
         <div
-          onClick={() => setPhotoOpen(true)}
-          style={{ width:80, height:80, borderRadius:"50%", border:`3px solid ${C.gold}`, overflow:"hidden", margin:"0 auto 12px", boxShadow:"0 0 0 4px rgba(240,180,41,0.15)", cursor:"pointer" }}
-        >
-          <img src={mamanPhoto} alt="Rose-Marie" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-        </div>
+  onClick={() => setPhotoOpen(true)}
+  style={{
+    position:"relative",
+    width:135,
+    height:135,
+    borderRadius:"50%",
+    overflow:"hidden",
+    margin:"10px auto 12px",
+    cursor:"pointer",
+  }}
+>
+  {/* PHOTO PATIENT */}
+  <img
+    src={mamanPhoto}
+    alt="Patient"
+    style={{
+      width:"52%",
+      height:"52%",
+      objectFit:"cover",
+      position:"absolute",
+      top:"50%",
+      left:"50%",
+      transform:"translate(-50%, -50%)",
+      borderRadius:"50%",
+      zIndex:1,
+    }}
+  />
+
+  {/* LOGO OVERLAY */}
+  <img
+    src={iconSans}
+    alt="Logo"
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"contain",
+      position:"absolute",
+      inset:0,
+      zIndex:2,
+    }}
+  />
+</div>
         <h1 style={{ fontFamily:"'Playfair Display',Georgia,serif", fontSize:"1.7rem", fontWeight:700, color:"#fff", margin:"0 0 3px" }}>
           Visites Rose-Marie
         </h1>
@@ -357,7 +395,6 @@ export default function App() {
               background:`linear-gradient(135deg, ${C.accent}, #1a5a9e)`,
               color:"#fff", border:"none", borderRadius:10, cursor:"pointer",
               fontWeight:700, fontSize:"0.92rem", fontFamily:"'DM Sans',system-ui,sans-serif",
-              boxShadow:"0 4px 15px rgba(46,117,182,0.4)",
             }}>⚡ Prochaine disponibilité</button>
 
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
@@ -744,11 +781,51 @@ export default function App() {
 
             {/* Aperçu visuel de ce qui va se passer */}
             <div style={{ background:"rgba(46,117,182,0.08)", border:`1px solid rgba(46,117,182,0.25)`, borderRadius:12, padding:"14px 16px", display:"flex", gap:14, alignItems:"center" }}>
-              <div style={{ width:54, height:54, borderRadius:14, overflow:"hidden", border:`2px solid ${C.gold}`, flexShrink:0, background:C.bg }}>
-                <img src={mamanPhoto} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }} />
-              </div>
+              <div
+  onClick={() => setPhotoOpen(true)}
+  style={{
+    position:"relative",
+    width:84,
+    height:84,
+    borderRadius:"50%",
+    overflow:"hidden",
+    margin:"10px auto 12px",
+    cursor:"pointer",
+  }}
+>
+  {/* PHOTO PATIENT */}
+  <img
+    src={mamanPhoto}
+    alt="Patient"
+    style={{
+      width:"52%",
+      height:"52%",
+      objectFit:"cover",
+      position:"absolute",
+      top:"50%",
+      left:"50%",
+      transform:"translate(-50%, -50%)",
+      borderRadius:"50%",
+      zIndex:1,
+    }}
+  />
+
+  {/* LOGO OVERLAY */}
+  <img
+    src={iconSans}
+    alt="Logo"
+    style={{
+      width:"100%",
+      height:"100%",
+      objectFit:"contain",
+      position:"absolute",
+      inset:0,
+      zIndex:2,
+    }}
+  />
+</div>
               <div>
-                <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Rose-Marie</div>
+                <div style={{ fontSize:"0.82rem", color:C.text, fontWeight:600 }}>Planning Visites</div>
                 <div style={{ fontSize:"0.72rem", color:C.muted, marginTop:2 }}>
                   L'icône qui apparaîtra sur ton écran d'accueil ↑
                 </div>
