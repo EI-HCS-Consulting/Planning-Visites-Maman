@@ -2,35 +2,92 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Responsive -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+
+    <!-- Titre -->
     <title>Visites Rose-Marie · CHU Grenoble</title>
 
+    <!-- Description -->
+    <meta
+      name="description"
+      content="Planning des visites de Rose-Marie à l'hôpital Michallon"
+    />
+
+    <!-- Theme color -->
+    <meta name="theme-color" content="#1F3864" />
+
     <!-- Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=DM+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
 
-    <!-- PWA : installation sur écran d'accueil -->
-    <link rel="manifest" href="/manifest.json">
-    <meta name="theme-color" content="#1F3864">
-
-    <!-- Icônes iOS -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Rose-Marie">
+    <!-- Manifest PWA -->
+    <link rel="manifest" href="/manifest.json" />
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/favicon.png">
+    <link rel="icon" type="image/png" href="/favicon.png" />
 
-    <!-- SEO / Partage (WhatsApp, SMS, etc.) -->
-    <meta name="description" content="Planning des visites de Rose-Marie à l'hôpital Michallon">
-    <meta property="og:title" content="Visites Rose-Marie">
-    <meta property="og:description" content="Organiser les visites à l'hôpital Michallon - Chambre 140">
-    <meta property="og:image" content="/icon-512.png">
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://planning-visites-maman.vercel.app">
+    <!-- Icônes Apple -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!-- iOS PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="apple-mobile-web-app-title" content="Rose-Marie" />
+
+    <!-- Open Graph / WhatsApp / Facebook -->
+    <meta property="og:locale" content="fr_FR" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Visites Rose-Marie" />
+    <meta
+      property="og:description"
+      content="Organiser les visites à l'hôpital Michallon - Chambre 140"
+    />
+    <meta
+      property="og:url"
+      content="https://planning-visites-maman.vercel.app"
+    />
+
+    <!-- IMPORTANT : image absolue -->
+    <meta
+      property="og:image"
+      content="https://planning-visites-maman.vercel.app/og-image.png"
+    />
+
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- Twitter / iMessage -->
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <meta
+      name="twitter:image"
+      content="https://planning-visites-maman.vercel.app/og-image.png"
+    />
+
+    <meta
+      name="twitter:title"
+      content="Visites Rose-Marie"
+    />
+
+    <meta
+      name="twitter:description"
+      content="Planning des visites à l'hôpital Michallon"
+    />
   </head>
+
   <body>
     <div id="root"></div>
+
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
