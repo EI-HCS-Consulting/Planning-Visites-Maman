@@ -437,15 +437,15 @@ function SouvenirsTab({ showToast }) {
         .filter(f => f.name !== ".emptyFolderPlaceholder")
         .map(f => {
           const { data: urlData } = supabase.storage.from("souvenirs").getPublicUrl(f.name);
-          const parts = f.name.replace(/\.[^.]+$/, "").split("_");
+          const parts = f.name.replace(/\.[^.]+$/, "").split("__");
           const ts = parts[0];
           const prenomVal = parts[1] || "";
-          const legendeVal = parts.slice(2).join(" ") || "";
+          const legendeVal = parts[2] || "";
           return {
             name: f.name,
             url: urlData.publicUrl,
-            prenom: prenomVal,
-            legende: legendeVal,
+            prenom: prenomVal.replace(/-/g, " "),
+            legende: legendeVal.replace(/-/g, " "),
             date: new Date(parseInt(ts)),
           };
         });
@@ -499,7 +499,8 @@ function SouvenirsTab({ showToast }) {
       const sanitize = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
       const prenomClean = sanitize(prenom.trim()) || "Anonyme";
       const legendeClean = sanitize(legende.trim());
-      const fileName = legendeClean ? `${ts}_${prenomClean}_${legendeClean}.jpg` : `${ts}_${prenomClean}.jpg`;
+      // Séparateur __ entre prénom et légende pour éviter toute ambiguïté au parsing
+      const fileName = legendeClean ? `${ts}__${prenomClean}__${legendeClean}.jpg` : `${ts}__${prenomClean}.jpg`;
       const { error } = await supabase.storage.from("souvenirs").upload(fileName, compressed, {
         contentType: "image/jpeg", cacheControl: "3600",
       });
@@ -626,11 +627,17 @@ function SouvenirsTab({ showToast }) {
             </div>
             {[
               { ph:"Ton prénom *", val:prenom, set:setPrenom },
-              { ph:"Une légende (optionnel)", val:legende, set:setLegende },
             ].map(({ ph, val, set }) => (
               <input key={ph} placeholder={ph} value={val} onChange={e => set(e.target.value)}
                 style={{ width:"100%", padding:"10px 12px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, color:C.text, fontSize:"0.9rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginBottom:8, boxSizing:"border-box" }} />
             ))}
+            <textarea
+              placeholder="Lieu, date, contexte… ex : Jardin de la maison, été 2023 🌞"
+              value={legende}
+              onChange={e => setLegende(e.target.value)}
+              rows={2}
+              style={{ width:"100%", padding:"10px 12px", background:C.bg, border:`1px solid ${C.border}`, borderRadius:7, color:C.text, fontSize:"0.85rem", fontFamily:"'DM Sans',system-ui,sans-serif", marginBottom:8, boxSizing:"border-box", resize:"none", lineHeight:1.5 }}
+            />
             {uploading && (
               <div style={{ marginBottom:12 }}>
                 <div style={{ height:4, background:C.border, borderRadius:2, overflow:"hidden" }}>
