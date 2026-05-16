@@ -287,7 +287,7 @@ function EditFullModal({ reservation, reservations, onClose, onSave }) {
     );
   }
 
-  const canSave = prenom.trim() && selDate && (isNight ? !nightOccupied() : !!selSlot);
+  const canSave = prenom.trim() && nom.trim() && selDate && (isNight ? !nightOccupied() : !!selSlot);
 
   async function handleSave() {
     if (!canSave) return;
@@ -388,7 +388,7 @@ function EditFullModal({ reservation, reservations, onClose, onSave }) {
         </div>
         {[
           { ph:"Prénom *", val:prenom, set:setPrenom },
-          { ph:"Nom", val:nom, set:setNom },
+          { ph:"Nom *", val:nom, set:setNom },
           { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
         ].map(({ph,val,set,type="text"}) => (
           <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
@@ -530,7 +530,7 @@ export default function App() {
   }
 
   async function handleBook() {
-    if (!prenom.trim() || (!editingId && userPin.length < 4)) return;
+    if (!prenom.trim() || !nom.trim() || (!editingId && userPin.length < 4)) return;
     setSaving(true);
     try {
       if (editingId) {
@@ -1271,7 +1271,7 @@ export default function App() {
                   {/* Champs infos */}
                   {[
                     { ph:"Prénom *", val:prenom, set:setPrenom },
-                    { ph:"Nom", val:nom, set:setNom },
+                    { ph:"Nom *", val:nom, set:setNom },
                     { ph:"Téléphone", val:tel, set:setTel, type:"tel" },
                   ].map(({ph,val,set,type="text"}) => (
                     <input key={ph} type={type} placeholder={ph} value={val} onChange={e=>set(e.target.value)}
@@ -1329,8 +1329,8 @@ export default function App() {
                   <div style={{ display:"flex", gap:8, marginTop:14 }}>
                     <button style={{ flex:1, padding:11, background:"transparent", color:C.muted, border:`1px solid ${C.border}`, borderRadius:8, cursor:"pointer", fontWeight:500, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif" }}
                       onClick={() => setModal(null)}>Annuler</button>
-                    <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", opacity: (!prenom.trim() || saving || (!editingId && userPin.length < 4)) ? 0.5 : 1, cursor: (!prenom.trim() || saving || (!editingId && userPin.length < 4)) ? "default" : "pointer" }}
-                      onClick={handleBook} disabled={!prenom.trim() || saving || (!editingId && userPin.length < 4)}>
+                    <button style={{ flex:1, padding:11, background:C.accent, color:"#fff", border:"none", borderRadius:8, fontWeight:600, fontSize:"0.84rem", fontFamily:"'DM Sans',system-ui,sans-serif", opacity: (!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)) ? 0.5 : 1, cursor: (!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)) ? "default" : "pointer" }}
+                      onClick={handleBook} disabled={!prenom.trim() || !nom.trim() || saving || (!editingId && userPin.length < 4)}>
                       {saving ? "Envoi…" : editingId ? "Enregistrer" : "Confirmer"}
                     </button>
                   </div>
