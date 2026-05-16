@@ -221,7 +221,7 @@ export default function App() {
         creneau: modal.slot || "Nuit",
         prenom: prenom.trim(),
         nom: nom.trim(),
-        checkout -b fix/telephone-insert
+        telephone: tel.trim(),
         type: modal.type === "night" ? "Nuit" : "Visite",
       });
       if (error) throw error;
