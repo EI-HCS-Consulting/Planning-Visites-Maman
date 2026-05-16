@@ -306,8 +306,8 @@ export default function App() {
   onClick={() => setPhotoOpen(true)}
   style={{
     position:"relative",
-    width:116,
-    height:116,
+    width:135,
+    height:135,
     borderRadius:"50%",
     overflow:"hidden",
     margin:"10px auto 12px",
@@ -319,8 +319,8 @@ export default function App() {
     src={mamanPhoto}
     alt="Patient"
     style={{
-      width:"72%",
-      height:"72%",
+      width:"52%",
+      height:"52%",
       objectFit:"cover",
       position:"absolute",
       top:"50%",
@@ -785,8 +785,8 @@ export default function App() {
   onClick={() => setPhotoOpen(true)}
   style={{
     position:"relative",
-    width:64,
-    height:64,
+    width:84,
+    height:84,
     borderRadius:"50%",
     overflow:"hidden",
     margin:"10px auto 12px",
@@ -798,8 +798,8 @@ export default function App() {
     src={mamanPhoto}
     alt="Patient"
     style={{
-      width:"72%",
-      height:"72%",
+      width:"52%",
+      height:"52%",
       objectFit:"cover",
       position:"absolute",
       top:"50%",
