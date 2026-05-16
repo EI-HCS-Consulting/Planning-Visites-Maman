@@ -306,28 +306,32 @@ export default function App() {
   onClick={() => setPhotoOpen(true)}
   style={{
     position:"relative",
-    width:80,
-    height:80,
+    width:96,
+    height:96,
     borderRadius:"50%",
     overflow:"hidden",
-    margin:"0 auto 12px",
-    
+    margin:"10px auto 12px",
+    cursor:"pointer",
   }}
 >
-  {/* Photo patient */}
+  {/* PHOTO PATIENT */}
   <img
     src={mamanPhoto}
     alt="Patient"
     style={{
-      width:"100%",
-      height:"100%",
+      width:"72%",
+      height:"72%",
       objectFit:"cover",
       position:"absolute",
-      inset:0,
+      top:"50%",
+      left:"50%",
+      transform:"translate(-50%, -50%)",
+      borderRadius:"50%",
+      zIndex:1,
     }}
   />
 
-  {/* Logo overlay */}
+  {/* LOGO OVERLAY */}
   <img
     src={iconSans}
     alt="Logo"
@@ -338,7 +342,6 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(1.5)",
     }}
   />
 </div>
@@ -779,34 +782,38 @@ export default function App() {
             {/* Aperçu visuel de ce qui va se passer */}
             <div style={{ background:"rgba(46,117,182,0.08)", border:`1px solid rgba(46,117,182,0.25)`, borderRadius:12, padding:"14px 16px", display:"flex", gap:14, alignItems:"center" }}>
               <div
+  onClick={() => setPhotoOpen(true)}
   style={{
     position:"relative",
-    width:54,
-    height:54,
-    borderRadius:14,
+    width:64,
+    height:64,
+    borderRadius:"50%",
     overflow:"hidden",
-    border:`2px solid ${C.gold}`,
-    flexShrink:0,
-    background:C.bg
+    margin:"10px auto 12px",
+    cursor:"pointer",
   }}
 >
-  {/* Photo patient */}
+  {/* PHOTO PATIENT */}
   <img
     src={mamanPhoto}
-    alt=""
+    alt="Patient"
     style={{
-      width:"100%",
-      height:"100%",
+      width:"72%",
+      height:"72%",
       objectFit:"cover",
       position:"absolute",
-      inset:0,
+      top:"50%",
+      left:"50%",
+      transform:"translate(-50%, -50%)",
+      borderRadius:"50%",
+      zIndex:1,
     }}
   />
 
-  {/* Overlay logo */}
+  {/* LOGO OVERLAY */}
   <img
     src={iconSans}
-    alt=""
+    alt="Logo"
     style={{
       width:"100%",
       height:"100%",
@@ -814,7 +821,6 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(1.5)",
     }}
   />
 </div>
