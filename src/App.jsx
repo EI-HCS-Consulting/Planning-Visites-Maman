@@ -338,7 +338,7 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(1.2)",
+      transform:"scale(1.5)",
     }}
   />
 </div>
@@ -814,7 +814,7 @@ export default function App() {
       position:"absolute",
       inset:0,
       zIndex:2,
-      transform:"scale(1.2)",
+      transform:"scale(1.5)",
     }}
   />
 </div>
