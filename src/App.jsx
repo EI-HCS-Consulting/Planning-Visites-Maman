@@ -548,7 +548,7 @@ function SouvenirsTab({ showToast }) {
         }}>{selectMode ? "✕ Annuler" : "☑️ Sélection"}</button>
       </div>
 
-      <input ref={fileInputRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }} onChange={handleFileSelect} />
+      <input ref={fileInputRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleFileSelect} />
 
       {selectMode && selected.size > 0 && (
         <button onClick={downloadSelected} style={{
