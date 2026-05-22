@@ -10,7 +10,7 @@ const NIGHT_SUSPENDED_FROM = new Date("2026-05-15T00:00:00");
 const HOSPITAL = {
   name: "Hôpital Michallon · CHU Grenoble Alpes · Pavillon de Neurologie",
   address: "Bd de la Chantourne, 38700 La Tronche",
-  room: "Neurologie | Secteur C | Chambre 140",
+  room: "Neurologie | Secteur A | Chambre 102",
   mapsUrl: "https://maps.app.goo.gl/uPXWyKzcTGMKCnNG7",
 };
 
@@ -26,6 +26,7 @@ const RULES = [
   { icon: "📖", text: "Un livre a été laissé dans la chambre pour maman : chacun peut y écrire un mot, un souvenir, un poème, coller une photo ou un dessin afin de lui laisser une trace de [...]" },
   { icon: "🚪", text: "À la fin de la visite, laisser la porte grande ouverte pour que le personnel puisse surveiller que tout va bien." },
   { icon: "🌙", text: "Les nuitées familiales sont suspendues par l'équipe médicale depuis le 15/05/2026." },
+  { icon: "🌙", text: "Maman a changé de chambre depuis le 21/05/2026 (du Secteur C / chambre 140 au Secteur A / Chambre 102 - Même bâtiment)." },
 ];
 
 const C = {
