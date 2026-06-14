@@ -82,7 +82,8 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
 
     refreshReservations();
 
-    const channel = supabase
+    // Reservations realtime
+    const ch1 = supabase
       .channel(`reservations:${space.id}`)
       .on(
         "postgres_changes",
@@ -91,8 +92,21 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, [space, refreshReservations]);
+    // Space realtime — reflect theme/photo changes immediately
+    const ch2 = supabase
+      .channel(`space-admin:${space.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "patient_spaces", filter: `id=eq.${space.id}` },
+        (payload) => { setSpace(payload.new as PatientSpace); },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch1);
+      supabase.removeChannel(ch2);
+    };
+  }, [space?.id, refreshReservations]);
 
   return (
     <SpaceContext.Provider

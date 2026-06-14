@@ -8,6 +8,7 @@ import {
   toISO, toFrLong, addDays,
 } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
+import PatientAvatar from "@/components/PatientAvatar";
 import { useRouter } from "expo-router";
 
 const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
@@ -49,12 +50,21 @@ export default function VisitorCalendarScreen() {
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-        <Text style={[styles.patientName, { color: "#fff" }]}>
-          {space.patient_firstname} {space.patient_lastname}
-        </Text>
-        <Text style={[styles.room, { color: C.gold }]}>
-          {space.hospital_room}
-        </Text>
+        <PatientAvatar
+          photoUrl={space.patient_photo_url}
+          firstname={space.patient_firstname}
+          lastname={space.patient_lastname}
+          size={42}
+          C={C}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.patientName, { color: "#fff" }]}>
+            {space.patient_firstname} {space.patient_lastname}
+          </Text>
+          <Text style={[styles.room, { color: C.gold }]}>
+            {space.hospital_room}
+          </Text>
+        </View>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -161,13 +171,15 @@ export default function VisitorCalendarScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 52,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    alignItems: "center",
   },
-  patientName: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 20 },
+  patientName: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18 },
   room: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 2 },
   scroll: { padding: 16, paddingBottom: 32 },
   nextDispoBtn: { borderRadius: 12, paddingVertical: 14, alignItems: "center", marginBottom: 20 },

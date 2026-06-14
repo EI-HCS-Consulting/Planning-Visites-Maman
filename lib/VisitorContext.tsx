@@ -91,12 +91,28 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
   useEffect(() => {
     if (!space) return;
     refreshReservations();
-    const channel = supabase
+
+    // Reservations realtime
+    const ch1 = supabase
       .channel(`visitor-reservations:${space.id}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "reservations", filter: `space_id=eq.${space.id}` }, refreshReservations)
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [space, refreshReservations]);
+
+    // Space realtime — reflect theme/photo changes from admin immediately
+    const ch2 = supabase
+      .channel(`space-visitor:${space.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "patient_spaces", filter: `id=eq.${space.id}` },
+        (payload) => { setSpace(payload.new as PatientSpace); },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch1);
+      supabase.removeChannel(ch2);
+    };
+  }, [space?.id, refreshReservations]);
 
   return (
     <VisitorContext.Provider value={{ space, slotConfig, slots, reservations, loading, token, selectedDay, setSelectedDay, refreshReservations }}>

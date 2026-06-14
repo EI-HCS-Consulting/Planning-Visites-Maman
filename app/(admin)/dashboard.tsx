@@ -9,6 +9,7 @@ import {
   findNextAvailableSlot, getDaysInMonth, toISO, toFrLong, toFrShort, addDays,
 } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
+import PatientAvatar from "@/components/PatientAvatar";
 import type { Reservation } from "@/lib/types";
 
 type DashView = "calendar" | "day";
@@ -76,12 +77,21 @@ export default function DashboardScreen() {
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-        <Text style={[styles.headerTitle, { color: "#fff" }]}>
-          {space!.patient_firstname} {space!.patient_lastname}
-        </Text>
-        <Text style={[styles.headerSub, { color: C.gold }]}>
-          {space!.hospital_room} · {space!.hospital_name.split("·")[0].trim()}
-        </Text>
+        <PatientAvatar
+          photoUrl={space!.patient_photo_url}
+          firstname={space!.patient_firstname}
+          lastname={space!.patient_lastname}
+          size={44}
+          C={C}
+        />
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.headerTitle, { color: "#fff" }]}>
+            {space!.patient_firstname} {space!.patient_lastname}
+          </Text>
+          <Text style={[styles.headerSub, { color: C.gold }]}>
+            {space!.hospital_room} · {space!.hospital_name.split("·")[0].trim()}
+          </Text>
+        </View>
       </View>
 
       {view === "calendar" ? (
@@ -364,13 +374,15 @@ const styles = StyleSheet.create({
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   scroll: { padding: 16, paddingBottom: 32 },
   header: {
-    paddingHorizontal: 20,
-    paddingTop: 56,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 52,
     paddingBottom: 14,
     borderBottomWidth: 1,
-    alignItems: "center",
   },
-  headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 20 },
+  headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18 },
   headerSub: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 2 },
   emptyTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 22, marginBottom: 16, textAlign: "center" },
   emptyText: { fontFamily: "DM_Sans_400Regular", fontSize: 14, textAlign: "center", lineHeight: 22 },
