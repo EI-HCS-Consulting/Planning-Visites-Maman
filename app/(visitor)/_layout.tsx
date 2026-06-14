@@ -4,11 +4,16 @@ import { Tabs, useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { VisitorSpaceProvider, useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
+import { setupNotifications } from "@/lib/notifications";
 
 function VisitorTabs() {
   const { space, loading } = useVisitorSpace();
   const router = useRouter();
   const C = themes[space?.theme ?? "blue"];
+
+  useEffect(() => {
+    setupNotifications();
+  }, []);
 
   useEffect(() => {
     if (!loading && !space) {

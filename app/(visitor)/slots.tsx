@@ -5,6 +5,7 @@ import {
   Platform,
 } from "react-native";
 import * as ExpoCalendar from "expo-calendar";
+import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { supabase } from "@/lib/supabase";
 import PinPad from "@/components/PinPad";
@@ -156,7 +157,7 @@ export default function SlotsScreen() {
     setSaving(true);
     const iso = toISO(selectedDay);
 
-    const { error } = await supabase.from("reservations").insert({
+    const { data: newResa, error } = await supabase.from("reservations").insert({
       space_id: space.id,
       date: iso,
       creneau: bookingTarget.type === "Nuit" ? "🌙 Nuit" : bookingTarget.slot,
@@ -165,7 +166,7 @@ export default function SlotsScreen() {
       telephone: tel.trim(),
       type: bookingTarget.type,
       pin: pinValue,
-    });
+    }).select().single();
 
     setSaving(false);
 
@@ -177,13 +178,25 @@ export default function SlotsScreen() {
     await updateLastActivity(space.id);
     await refreshReservations();
 
+    const notifSlot = bookingTarget.type === "Nuit" ? "18:00" : bookingTarget.slot;
+
     setConfirmed({
       prenom: prenom.trim(),
       pin: pinValue,
       iso,
-      slot: bookingTarget.type === "Nuit" ? "18:00" : bookingTarget.slot,
+      slot: notifSlot,
       type: bookingTarget.type,
     });
+
+    if (newResa?.id) {
+      scheduleVisitReminder(
+        newResa.id,
+        iso,
+        notifSlot,
+        prenom.trim(),
+        `${space.patient_firstname} ${space.patient_lastname}`,
+      );
+    }
   }
 
   // ── Cancel ──────────────────────────────────────────────────────────────────
@@ -203,7 +216,21 @@ export default function SlotsScreen() {
       return;
     }
 
-    // TODO task 11: appel Edge Function pour email admin
+    // Email annulation à l'admin (fire-and-forget)
+    supabase.functions.invoke("notify-cancel", {
+      body: {
+        space_id: space.id,
+        visitor_prenom: pinModal.prenom,
+        visitor_nom: pinModal.nom,
+        date: pinModal.date,
+        creneau: pinModal.creneau,
+        type: pinModal.type,
+      },
+    }).catch(() => {});
+
+    // Annuler le rappel local
+    cancelVisitReminder(pinModal.id);
+
     await updateLastActivity(space.id);
     await refreshReservations();
     showToast("Réservation annulée ✓");
