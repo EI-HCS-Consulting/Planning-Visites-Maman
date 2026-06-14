@@ -13,7 +13,7 @@ import { useRouter } from "expo-router";
 const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
 export default function VisitorCalendarScreen() {
-  const { space, slotConfig, slots, reservations } = useVisitorSpace();
+  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay } = useVisitorSpace();
   const router = useRouter();
 
   const C = themes[space?.theme ?? "blue"];
@@ -25,7 +25,6 @@ export default function VisitorCalendarScreen() {
   const initialDay = useMemo(() => (today >= startDate ? today : startDate), [today, startDate]);
 
   const [calMonth, setCalMonth] = useState({ year: initialDay.getFullYear(), month: initialDay.getMonth() });
-  const [selectedDay, setSelectedDay] = useState<Date>(initialDay);
 
   const monthDays = getDaysInMonth(calMonth.year, calMonth.month);
   const firstDow = (new Date(calMonth.year, calMonth.month, 1).getDay() + 6) % 7;
@@ -127,6 +126,7 @@ export default function VisitorCalendarScreen() {
                 onPress={() => {
                   if (!isPast) {
                     setSelectedDay(day);
+                    setCalMonth({ year: day.getFullYear(), month: day.getMonth() });
                     router.navigate("/(visitor)/slots");
                   }
                 }}

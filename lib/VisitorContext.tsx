@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 import { supabase } from "./supabase";
-import { generateSlots } from "./slotUtils";
+import { generateSlots, toISO } from "./slotUtils";
 import type { PatientSpace, SlotConfig, Reservation } from "./types";
 
 interface VisitorContextValue {
@@ -10,6 +10,8 @@ interface VisitorContextValue {
   reservations: Reservation[];
   loading: boolean;
   token: string;
+  selectedDay: Date;
+  setSelectedDay: (day: Date) => void;
   refreshReservations: () => Promise<void>;
 }
 
@@ -20,6 +22,8 @@ const VisitorContext = createContext<VisitorContextValue>({
   reservations: [],
   loading: true,
   token: "",
+  selectedDay: new Date(),
+  setSelectedDay: () => {},
   refreshReservations: async () => {},
 });
 
@@ -33,9 +37,14 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
   const [slots, setSlots] = useState<string[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) { setLoading(false); return; }
 
     async function fetchSpace() {
       const { data: spaceData } = await supabase
@@ -45,12 +54,13 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
         .eq("is_active", true)
         .single();
 
-      if (!spaceData) {
-        setLoading(false);
-        return;
-      }
+      if (!spaceData) { setLoading(false); return; }
 
       setSpace(spaceData);
+
+      // Adjust selectedDay to start_date if today is before it
+      const startDate = new Date(spaceData.start_date + "T00:00:00");
+      setSelectedDay((prev) => (prev < startDate ? startDate : prev));
 
       const { data: configData } = await supabase
         .from("slot_config")
@@ -80,25 +90,16 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
 
   useEffect(() => {
     if (!space) return;
-
     refreshReservations();
-
     const channel = supabase
       .channel(`visitor-reservations:${space.id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "reservations", filter: `space_id=eq.${space.id}` },
-        refreshReservations,
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "reservations", filter: `space_id=eq.${space.id}` }, refreshReservations)
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [space, refreshReservations]);
 
   return (
-    <VisitorContext.Provider
-      value={{ space, slotConfig, slots, reservations, loading, token, refreshReservations }}
-    >
+    <VisitorContext.Provider value={{ space, slotConfig, slots, reservations, loading, token, selectedDay, setSelectedDay, refreshReservations }}>
       {children}
     </VisitorContext.Provider>
   );
