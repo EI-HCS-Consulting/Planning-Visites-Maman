@@ -31,6 +31,7 @@ export default function SettingsScreen() {
 
   const [themeUpdating, setThemeUpdating] = useState(false);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [prolonging, setProlonging] = useState(false);
   const [toast, setToast] = useState("");
 
   function showToast(msg: string) {
@@ -125,6 +126,47 @@ export default function SettingsScreen() {
         },
       },
     ]);
+  }
+
+  // ── Prolongation RGPD ─────────────────────────────────────────────────────
+  function handleProlong() {
+    if (!space) return;
+    Alert.alert(
+      "Prolonger l'espace",
+      "Ajouter 90 jours à la date de conservation ? Toutes les données seront conservées 90 jours de plus.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Prolonger",
+          onPress: async () => {
+            setProlonging(true);
+
+            const currentPurge = new Date(space.purge_scheduled_at);
+            const newPurge = new Date(currentPurge);
+            newPurge.setDate(newPurge.getDate() + 90);
+
+            const currentEnd = new Date(space.end_date + "T00:00:00");
+            const newEnd = new Date(currentEnd);
+            newEnd.setDate(newEnd.getDate() + 90);
+
+            const { error } = await supabase
+              .from("patient_spaces")
+              .update({
+                purge_scheduled_at: newPurge.toISOString(),
+                end_date: newEnd.toISOString().split("T")[0],
+              })
+              .eq("id", space.id);
+
+            setProlonging(false);
+            if (error) {
+              showToast("Erreur lors de la prolongation.");
+            } else {
+              showToast("Espace prolongé de 90 jours ✓");
+            }
+          },
+        },
+      ],
+    );
   }
 
   // ── Logout ─────────────────────────────────────────────────────────────────
@@ -272,6 +314,59 @@ export default function SettingsScreen() {
           </View>
         )}
 
+        {/* ── Section : Conservation RGPD ──────────────────────────────────── */}
+        {hasSpace && space && (() => {
+          const purgeDate = new Date(space.purge_scheduled_at);
+          const todayMs = new Date().setHours(0, 0, 0, 0);
+          const daysLeft = Math.ceil((purgeDate.getTime() - todayMs) / (1000 * 60 * 60 * 24));
+          const purgeDateFr = purgeDate.toLocaleDateString("fr-FR", {
+            day: "numeric", month: "long", year: "numeric",
+          });
+          const isUrgent = daysLeft <= 7;
+          const isWarning = daysLeft <= 30;
+          const alertColor = isUrgent ? "#e94560" : isWarning ? C.orange : C.muted;
+
+          return (
+            <>
+              <Text style={[styles.sectionTitle, { color: C.gold }]}>Conservation des données</Text>
+              <View style={[styles.card, {
+                backgroundColor: C.card,
+                borderColor: isUrgent ? "rgba(233,69,96,0.5)" : isWarning ? "rgba(230,126,34,0.4)" : C.border,
+              }]}>
+                <View style={styles.rgpdRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.rgpdLabel, { color: C.muted }]}>Suppression prévue le</Text>
+                    <Text style={[styles.rgpdDate, { color: isUrgent ? "#e94560" : "#fff" }]}>
+                      {purgeDateFr}
+                    </Text>
+                    <Text style={[styles.rgpdDays, { color: alertColor }]}>
+                      {daysLeft > 0
+                        ? `J-${daysLeft}${isUrgent ? " ⚠️  Suppression imminente" : isWarning ? " — Pensez à prolonger" : ""}`
+                        : "Expiration dépassée"
+                      }
+                    </Text>
+                  </View>
+                </View>
+
+                <Text style={[styles.cardDesc, { marginTop: 12, marginBottom: 14 }]}>
+                  Planning, souvenirs et messages seront définitivement supprimés à cette date. Conforme RGPD.
+                </Text>
+
+                <TouchableOpacity
+                  style={[styles.prolongBtn, { backgroundColor: C.accent }, prolonging && { opacity: 0.6 }]}
+                  onPress={handleProlong}
+                  disabled={prolonging}
+                >
+                  {prolonging
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.prolongBtnText}>⏳ Prolonger de 90 jours</Text>
+                  }
+                </TouchableOpacity>
+              </View>
+            </>
+          );
+        })()}
+
         {/* ── Section : Compte ─────────────────────────────────────────────── */}
         <Text style={[styles.sectionTitle, { color: C.gold }]}>Compte</Text>
         <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -340,6 +435,14 @@ const styles = StyleSheet.create({
   themeSwatch: { width: 18, height: 18, borderRadius: 9 },
   themeLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, flex: 1 },
   themeCheck: { fontFamily: "DM_Sans_700Bold", fontSize: 14 },
+
+  // RGPD
+  rgpdRow: { flexDirection: "row", alignItems: "flex-start" },
+  rgpdLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 4 },
+  rgpdDate: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 17 },
+  rgpdDays: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginTop: 4 },
+  prolongBtn: { borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
+  prolongBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
 
   // Logout
   logoutBtn: {
