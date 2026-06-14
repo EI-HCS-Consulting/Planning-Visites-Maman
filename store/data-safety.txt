@@ -1,0 +1,116 @@
+DATA SAFETY — Play Console
+Réponses au questionnaire "Sécurité des données" de Google Play
+Application : AvecToi (care.avectoi.app)
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+1. COLLECTE ET PARTAGE DE DONNÉES
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Votre appli collecte-t-elle des données utilisateur ? OUI
+
+Les données sont-elles partagées avec des tiers ? NON
+  → Supabase est un sous-traitant technique (hébergeur), pas un tiers au sens Play Store.
+
+Les données sont-elles chiffrées pendant leur transfert ? OUI (HTTPS/TLS)
+
+Les utilisateurs peuvent-ils demander la suppression de leurs données ? OUI
+  → Suppression automatique RGPD + possibilité manuelle via l'admin de l'espace.
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+2. TYPES DE DONNÉES COLLECTÉES
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+INFORMATIONS PERSONNELLES
+  • Nom (prénom + nom) — collecté pour les réservations de créneaux
+    Objectif : Fonctionnalités de l'appli | Non partagé | Suppression sur demande
+  • Adresse e-mail — collecté UNIQUEMENT pour le compte admin
+    Objectif : Gestion du compte | Non partagé | Suppression sur demande
+  • Numéro de téléphone — optionnel, pour les réservations
+    Objectif : Fonctionnalités de l'appli | Non partagé | Suppression sur demande
+
+PHOTOS ET VIDÉOS
+  • Photos — collectées pour la galerie souvenirs et les nouvelles du jour
+    Objectif : Fonctionnalités de l'appli | Non partagé | Suppression sur demande
+
+CONTENU GÉNÉRÉ PAR L'UTILISATEUR
+  • Messages (mur de soutien, nouvelles, tâches d'entraide)
+    Objectif : Fonctionnalités de l'appli | Non partagé | Suppression sur demande
+
+INFORMATIONS NON COLLECTÉES
+  ✗ Localisation
+  ✗ Données financières / bancaires (paiement exclusivement sur avectoi.care)
+  ✗ Santé et remise en forme
+  ✗ Navigation web ou historique des recherches
+  ✗ Identifiants publicitaires
+  ✗ Données biométriques
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+3. PRATIQUES DE SÉCURITÉ
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Les données sont-elles chiffrées au repos ? OUI (Supabase / PostgreSQL chiffrement au repos)
+Vous suivez les Règles du programme pour les familles ? NON (app non destinée aux enfants)
+Vous avez fait évaluer votre appli par un tiers indépendant ? NON
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+4. CATÉGORIE ET CLASSIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Catégorie principale : Médecine / Santé
+Sous-catégorie : Médecine
+Classement de contenu : PEGI 3 (tout public)
+Public cible : Adultes (18+)
+Contient des publicités : NON
+Contient des achats intégrés : NON
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+5. POLITIQUE DE CONFIDENTIALITÉ
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+URL obligatoire à fournir dans Play Console :
+https://avectoi.care/privacy
+
+Cette page doit exister et décrire :
+  - Quelles données sont collectées
+  - Comment elles sont utilisées et stockées
+  - Durée de conservation (purge automatique RGPD)
+  - Coordonnées du responsable de traitement (Guillaume Frey / HCS)
+  - Droits des utilisateurs (accès, rectification, suppression)
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+6. CHECKLIST PLAY CONSOLE — AVANT SOUMISSION
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+[ ] Créer l'app dans Play Console (care.avectoi.app)
+[ ] Fiche principale → copier title/short_description/full_description depuis store/android/fr-FR/
+[ ] Charger les captures d'écran (min. 2 téléphone, idéalement 4-8)
+[ ] Charger l'image de présentation (Feature graphic 1024×500 px)
+[ ] Renseigner l'URL de politique de confidentialité : https://avectoi.care/privacy
+[ ] Remplir le questionnaire Data Safety (réponses dans ce fichier)
+[ ] Remplir le questionnaire Classement du contenu (PEGI 3)
+[ ] Confirmer : aucun achat intégré, application gratuite
+[ ] Activer "Distribuer dans d'autres pays" → France (+ Belgique, Suisse si souhaité)
+[ ] Uploader l'AAB : eas build --profile production --platform android
+[ ] Soumettre sur la track "Interne" pour tests, puis "Production" après validation
+[ ] Délai de révision Google : 1 à 7 jours ouvrés
+
+━━━━━━━━━━━━━━━━━━━━━━━━
+7. CAPTURES D'ÉCRAN REQUISES
+━━━━━━━━━━━━━━━━━━━━━━━━
+
+Format téléphone : 1080×1920 px (portrait) — minimum 2, recommandé 6-8
+À placer dans : store/android/images/phoneScreenshots/
+
+Scènes recommandées :
+  01_calendrier.png      — Vue calendrier avec créneaux colorés
+  02_reservation.png     — Modal de réservation d'un créneau
+  03_confirmation.png    — Confirmation + code PIN + ajout calendrier
+  04_nouvelles.png       — Feed des nouvelles du jour
+  05_souvenirs.png       — Galerie photos souvenirs
+  06_entraide.png        — Liste des besoins + mur de soutien
+  07_theme.png           — Paramètres avec sélecteur de thème
+  08_invitation.png      — Modal d'invitation QR code
+
+Feature graphic (obligatoire) : 1024×500 px
+  → store/android/images/featureGraphic.png
+  → Fond #0D1B2E, logo AvecToi centré, baseline "Parce qu'être présent, ça s'organise"
