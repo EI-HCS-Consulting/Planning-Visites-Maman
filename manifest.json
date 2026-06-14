@@ -1,0 +1,24 @@
+{
+  "name": "Planning Visites",
+  "short_name": "Planning",
+  "description": "Planning des visites à l'hôpital Michallon",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0D1B2E",
+  "theme_color": "#1F3864",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-sans-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
