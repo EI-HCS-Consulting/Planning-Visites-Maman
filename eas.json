@@ -29,8 +29,10 @@
     "production": {
       "android": {
         "serviceAccountKeyPath": "./google-play-service-account.json",
+        "applicationId": "care.avectoi.app",
         "track": "internal",
-        "releaseStatus": "draft"
+        "releaseStatus": "draft",
+        "changesNotSentForReview": false
       }
     }
   }
