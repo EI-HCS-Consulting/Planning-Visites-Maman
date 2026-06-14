@@ -1,24 +1,35 @@
 import { useState, useMemo } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  ActivityIndicator, Modal, Alert,
+  ActivityIndicator, Modal, Alert, TextInput, Share, Linking,
+  KeyboardAvoidingView, Platform,
 } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import QRCode from "react-native-qrcode-svg";
+import { useRouter } from "expo-router";
 import { useSpace } from "@/lib/SpaceContext";
+import { supabase } from "@/lib/supabase";
 import {
   getDayStatus, getSlotOccupancy, getNightReservation,
   findNextAvailableSlot, getDaysInMonth, toISO, toFrLong, toFrShort, addDays,
 } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 import PatientAvatar from "@/components/PatientAvatar";
-import type { Reservation } from "@/lib/types";
+import type { Reservation, SlotConfig } from "@/lib/types";
+import type { Theme } from "@/lib/themes";
 
 type DashView = "calendar" | "day";
 
 const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
+const WEB_BASE = "https://avectoi.care";
+
+function inviteLink(token: string) {
+  return `${WEB_BASE}/invite?token=${token}`;
+}
 
 export default function DashboardScreen() {
-  const { space, slotConfig, slots, reservations, loading, hasSpace } = useSpace();
-
+  const router = useRouter();
+  const { space, slotConfig, slots, reservations, loading, hasSpace, refreshReservations } = useSpace();
   const C = themes[space?.theme ?? "blue"];
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -31,7 +42,26 @@ export default function DashboardScreen() {
   const [view, setView] = useState<DashView>("calendar");
   const [calMonth, setCalMonth] = useState({ year: initialDay.getFullYear(), month: initialDay.getMonth() });
   const [selectedDay, setSelectedDay] = useState<Date>(initialDay);
+
+  // Prochaine dispo modal
   const [nextDispoModal, setNextDispoModal] = useState<{ date: Date; iso: string; slot: string } | null>(null);
+
+  // Invite modal
+  const [inviteModal, setInviteModal] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  // Admin add reservation
+  const [addSlot, setAddSlot] = useState<string | null>(null);
+  const [addPrenom, setAddPrenom] = useState("");
+  const [addNom, setAddNom] = useState("");
+  const [addTel, setAddTel] = useState("");
+  const [addSaving, setAddSaving] = useState(false);
+
+  const [toast, setToast] = useState("");
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3000);
+  }
 
   function handleDayPress(day: Date) {
     setSelectedDay(day);
@@ -46,6 +76,86 @@ export default function DashboardScreen() {
     } else {
       Alert.alert("Aucune disponibilité", "Aucun créneau libre dans les 90 prochains jours.");
     }
+  }
+
+  // ── Invite ─────────────────────────────────────────────────────────────────
+  async function handleCopyLink() {
+    if (!space) return;
+    const link = inviteLink(space.invite_token);
+    await Clipboard.setStringAsync(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  }
+
+  async function handleShareLink() {
+    if (!space) return;
+    const link = inviteLink(space.invite_token);
+    await Share.share({
+      message: `Rejoins l'espace AvecToi pour ${space.patient_firstname} ${space.patient_lastname} :\n${link}`,
+      url: link,
+    });
+  }
+
+  async function handleWhatsApp() {
+    if (!space) return;
+    const link = inviteLink(space.invite_token);
+    const msg = encodeURIComponent(
+      `Voici le lien pour suivre les visites de ${space.patient_firstname} : ${link}`,
+    );
+    Linking.openURL(`whatsapp://send?text=${msg}`).catch(() =>
+      Alert.alert("WhatsApp non disponible", "Installe WhatsApp pour partager via l'appli."),
+    );
+  }
+
+  async function handleSMS() {
+    if (!space) return;
+    const link = inviteLink(space.invite_token);
+    const msg = encodeURIComponent(`Rejoins l'espace AvecToi : ${link}`);
+    Linking.openURL(`sms:?body=${msg}`);
+  }
+
+  // ── Admin add reservation ──────────────────────────────────────────────────
+  function openAddResa(slot: string) {
+    setAddSlot(slot);
+    setAddPrenom(""); setAddNom(""); setAddTel("");
+  }
+
+  async function handleAddResa() {
+    if (!space || !addSlot || !addPrenom.trim() || !addNom.trim()) return;
+    setAddSaving(true);
+    const { error } = await supabase.from("reservations").insert({
+      space_id: space.id,
+      date: toISO(selectedDay),
+      creneau: addSlot,
+      prenom: addPrenom.trim(),
+      nom: addNom.trim(),
+      telephone: addTel.trim(),
+      type: "Visite",
+      pin: "ADMIN",
+    });
+    setAddSaving(false);
+    if (error) { showToast("Erreur lors de l'ajout."); return; }
+    showToast("Réservation ajoutée ✓");
+    setAddSlot(null);
+    await refreshReservations();
+  }
+
+  async function handleDeleteResa(r: Reservation) {
+    Alert.alert(
+      "Supprimer cette réservation ?",
+      `${r.prenom} ${r.nom} · ${r.creneau}`,
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer", style: "destructive",
+          onPress: async () => {
+            await supabase.from("reservations").delete().eq("id", r.id);
+            await refreshReservations();
+            showToast("Réservation supprimée ✓");
+          },
+        },
+      ],
+    );
   }
 
   if (loading) {
@@ -72,6 +182,7 @@ export default function DashboardScreen() {
   const firstDow = (new Date(calMonth.year, calMonth.month, 1).getDay() + 6) % 7;
   const monthName = new Date(calMonth.year, calMonth.month, 1)
     .toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const link = inviteLink(space!.invite_token);
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
@@ -92,6 +203,12 @@ export default function DashboardScreen() {
             {space!.hospital_room} · {space!.hospital_name.split("·")[0].trim()}
           </Text>
         </View>
+        <TouchableOpacity
+          style={[styles.inviteBtn, { borderColor: C.accent }]}
+          onPress={() => setInviteModal(true)}
+        >
+          <Text style={[styles.inviteBtnText, { color: C.accent }]}>🔗 Inviter</Text>
+        </TouchableOpacity>
       </View>
 
       {view === "calendar" ? (
@@ -144,7 +261,6 @@ export default function DashboardScreen() {
               const isToday = toISO(day) === toISO(today);
               const isSelected = toISO(day) === toISO(selectedDay);
               const isPast = status === "past";
-
               const dotColor =
                 status === "full" ? C.danger :
                 status === "partial" ? C.orange :
@@ -202,10 +318,13 @@ export default function DashboardScreen() {
           }}
           onNextDay={() => setSelectedDay(addDays(selectedDay, 1))}
           startDate={startDate}
+          onAddResa={openAddResa}
+          onDeleteResa={handleDeleteResa}
+          onNavigateNews={() => router.navigate("/(admin)/news")}
         />
       )}
 
-      {/* Prochaine dispo modal */}
+      {/* ── MODAL PROCHAINE DISPO ─────────────────────────────────────────── */}
       <Modal transparent visible={!!nextDispoModal} animationType="fade" onRequestClose={() => setNextDispoModal(null)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setNextDispoModal(null)}>
           <View style={[styles.modal, { backgroundColor: C.card, borderColor: C.accent }]}>
@@ -222,12 +341,11 @@ export default function DashboardScreen() {
                   if (nextDispoModal) {
                     setSelectedDay(nextDispoModal.date);
                     setCalMonth({ year: nextDispoModal.date.getFullYear(), month: nextDispoModal.date.getMonth() });
-                    setView("day");
                   }
                   setNextDispoModal(null);
                 }}
               >
-                <Text style={[styles.modalBtnSecondaryText, { color: C.muted }]}>Voir le jour</Text>
+                <Text style={[styles.modalBtnSecondaryText, { color: C.muted }]}>Calendrier</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalBtnPrimary, { backgroundColor: C.accent }]}
@@ -239,12 +357,143 @@ export default function DashboardScreen() {
                   setNextDispoModal(null);
                 }}
               >
-                <Text style={styles.modalBtnPrimaryText}>Voir les créneaux</Text>
+                <Text style={styles.modalBtnPrimaryText}>Voir le jour →</Text>
               </TouchableOpacity>
             </View>
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* ── MODAL INVITATION ─────────────────────────────────────────────── */}
+      <Modal transparent visible={inviteModal} animationType="slide" onRequestClose={() => setInviteModal(false)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setInviteModal(false)}>
+          <TouchableOpacity activeOpacity={1}>
+            <View style={[styles.inviteSheet, { backgroundColor: C.card, borderColor: C.accent }]}>
+              <Text style={[styles.inviteTitle, { color: "#fff" }]}>🔗 Partager l'invitation</Text>
+              <Text style={[styles.inviteSub, { color: C.muted }]}>
+                Envoie ce lien aux proches pour qu'ils rejoignent l'espace.
+              </Text>
+
+              {/* QR Code */}
+              <View style={[styles.qrContainer, { backgroundColor: "#fff", borderColor: C.border }]}>
+                <QRCode value={link} size={160} backgroundColor="#fff" color="#0D1B2E" />
+              </View>
+
+              {/* Link display */}
+              <View style={[styles.linkBox, { backgroundColor: C.bg, borderColor: C.border }]}>
+                <Text style={[styles.linkText, { color: C.muted }]} numberOfLines={1} ellipsizeMode="middle">
+                  {link}
+                </Text>
+              </View>
+
+              {/* Action buttons */}
+              <TouchableOpacity
+                style={[styles.inviteActionBtn, { backgroundColor: C.accent }]}
+                onPress={handleCopyLink}
+              >
+                <Text style={styles.inviteActionBtnText}>
+                  {copied ? "✓ Copié !" : "📋 Copier le lien"}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.inviteRow}>
+                <TouchableOpacity
+                  style={[styles.inviteSmallBtn, { backgroundColor: "#25D366" }]}
+                  onPress={handleWhatsApp}
+                >
+                  <Text style={styles.inviteSmallBtnText}>WhatsApp</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
+                  onPress={handleSMS}
+                >
+                  <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>💬 SMS</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
+                  onPress={handleShareLink}
+                >
+                  <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>⬆️ Partager</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* ── MODAL AJOUT RÉSERVATION (admin) ──────────────────────────────── */}
+      <Modal visible={!!addSlot} transparent animationType="slide" onRequestClose={() => setAddSlot(null)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => !addSaving && setAddSlot(null)}>
+            <TouchableOpacity activeOpacity={1}>
+              <View style={[styles.inviteSheet, { backgroundColor: C.card, borderColor: C.accent }]}>
+                <Text style={[styles.inviteTitle, { color: "#fff" }]}>
+                  ➕ Ajouter une visite — {addSlot}
+                </Text>
+                <Text style={[styles.inviteSub, { color: C.muted }]}>
+                  {toFrLong(selectedDay)}
+                </Text>
+
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Prénom *"
+                  placeholderTextColor={C.muted}
+                  value={addPrenom}
+                  onChangeText={setAddPrenom}
+                  autoCapitalize="words"
+                />
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Nom *"
+                  placeholderTextColor={C.muted}
+                  value={addNom}
+                  onChangeText={setAddNom}
+                  autoCapitalize="words"
+                />
+                <TextInput
+                  style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Téléphone (optionnel)"
+                  placeholderTextColor={C.muted}
+                  value={addTel}
+                  onChangeText={setAddTel}
+                  keyboardType="phone-pad"
+                />
+
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity
+                    style={[styles.modalBtnSecondary, { borderColor: C.border }]}
+                    onPress={() => setAddSlot(null)}
+                    disabled={addSaving}
+                  >
+                    <Text style={[styles.modalBtnSecondaryText, { color: C.muted }]}>Annuler</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalBtnPrimary,
+                      { backgroundColor: C.accent },
+                      (!addPrenom.trim() || !addNom.trim() || addSaving) && { opacity: 0.5 },
+                    ]}
+                    onPress={handleAddResa}
+                    disabled={!addPrenom.trim() || !addNom.trim() || addSaving}
+                  >
+                    {addSaving
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.modalBtnPrimaryText}>Ajouter</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Toast */}
+      {!!toast && (
+        <View style={[styles.toast, { backgroundColor: C.success }]}>
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -254,25 +503,40 @@ interface DayViewProps {
   day: Date;
   reservations: Reservation[];
   slots: string[];
-  slotConfig: import("@/lib/types").SlotConfig;
+  slotConfig: SlotConfig;
   spaceId: string;
-  C: import("@/lib/themes").Theme;
+  C: Theme;
   onBack: () => void;
   onPrevDay: () => void;
   onNextDay: () => void;
   startDate: Date;
+  onAddResa: (slot: string) => void;
+  onDeleteResa: (r: Reservation) => void;
+  onNavigateNews: () => void;
 }
 
-function DayView({ day, reservations, slots, slotConfig, spaceId, C, onBack, onPrevDay, onNextDay, startDate }: DayViewProps) {
+function DayView({
+  day, reservations, slots, slotConfig, C,
+  onBack, onPrevDay, onNextDay, startDate,
+  onAddResa, onDeleteResa, onNavigateNews,
+}: DayViewProps) {
   const iso = toISO(day);
   const today = new Date(); today.setHours(0, 0, 0, 0);
 
   return (
     <ScrollView contentContainerStyle={styles.scroll}>
-      {/* Back */}
-      <TouchableOpacity onPress={onBack} style={styles.backBtn}>
-        <Text style={[styles.backText, { color: C.muted }]}>← Calendrier</Text>
-      </TouchableOpacity>
+      {/* Nav bar */}
+      <View style={styles.dayViewTop}>
+        <TouchableOpacity onPress={onBack} style={styles.backBtn}>
+          <Text style={[styles.backText, { color: C.muted }]}>← Calendrier</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.newsBtn, { borderColor: "rgba(240,180,41,0.4)", backgroundColor: "rgba(240,180,41,0.1)" }]}
+          onPress={onNavigateNews}
+        >
+          <Text style={[styles.newsBtnText, { color: C.gold }]}>📰 Nouvelles</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* Day nav */}
       <View style={[styles.dayNav, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -300,36 +564,45 @@ function DayView({ day, reservations, slots, slotConfig, spaceId, C, onBack, onP
         return (
           <View
             key={slot}
-            style={[
-              styles.slotCard,
-              {
-                backgroundColor: C.card,
-                borderColor: full ? "rgba(233,69,96,0.3)" : C.border,
-              },
-            ]}
+            style={[styles.slotCard, { backgroundColor: C.card, borderColor: full ? "rgba(233,69,96,0.3)" : C.border }]}
           >
-            <View style={styles.slotLeft}>
+            <View style={styles.slotHeader}>
               <Text style={[styles.slotTime, { color: C.gold }]}>{slot}</Text>
               <Text style={[styles.slotCount, { color: C.muted }]}>
-                {occ.length}/{slotConfig.max_visitors_per_slot} inscrits
+                {occ.length}/{slotConfig.max_visitors_per_slot}
               </Text>
-              {occ.map((r) => (
-                <Text key={r.id} style={[styles.slotName, { color: C.success }]}>
-                  ● {r.prenom} {r.nom}
-                </Text>
-              ))}
-              {occ.length === 0 && (
-                <Text style={[styles.slotName, { color: C.muted }]}>——</Text>
-              )}
-            </View>
-            <View style={styles.slotRight}>
               {!full && (
-                <Text style={[styles.slotAvail, { color: C.accent }]}>Disponible</Text>
+                <TouchableOpacity
+                  style={[styles.addResaBtn, { backgroundColor: C.accent }]}
+                  onPress={() => onAddResa(slot)}
+                >
+                  <Text style={styles.addResaBtnText}>+ Ajouter</Text>
+                </TouchableOpacity>
               )}
               {full && (
-                <Text style={[styles.slotFull, { color: C.danger }]}>Complet</Text>
+                <Text style={[styles.fullTag, { color: C.danger }]}>Complet</Text>
               )}
             </View>
+
+            {occ.length === 0
+              ? <Text style={[styles.slotEmpty, { color: C.muted }]}>Aucun visiteur inscrit</Text>
+              : occ.map((r) => (
+                <View key={r.id} style={[styles.resaRow, { borderColor: C.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.resaName, { color: C.success }]}>● {r.prenom} {r.nom}</Text>
+                    {r.telephone ? (
+                      <Text style={[styles.resaTel, { color: C.muted }]}>{r.telephone}</Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.deleteResaBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
+                    onPress={() => onDeleteResa(r)}
+                  >
+                    <Text style={{ color: "#e94560", fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))
+            }
           </View>
         );
       })}
@@ -339,29 +612,41 @@ function DayView({ day, reservations, slots, slotConfig, spaceId, C, onBack, onP
         const night = getNightReservation(reservations, iso);
         return (
           <View
-            style={[
-              styles.slotCard,
-              {
-                backgroundColor: C.card,
-                borderColor: night ? "rgba(233,69,96,0.3)" : "rgba(240,180,41,0.3)",
-              },
-            ]}
+            style={[styles.slotCard, {
+              backgroundColor: C.card,
+              borderColor: night ? "rgba(233,69,96,0.3)" : "rgba(240,180,41,0.3)",
+            }]}
           >
-            <View style={styles.slotLeft}>
+            <View style={styles.slotHeader}>
               <Text style={[styles.slotTime, { color: C.gold }]}>🌙 Nuit</Text>
               <Text style={[styles.slotCount, { color: C.muted }]}>18h → 11h</Text>
-              {night ? (
-                <Text style={[styles.slotName, { color: C.success }]}>● {night.prenom} {night.nom}</Text>
-              ) : (
-                <Text style={[styles.slotName, { color: C.muted }]}>——</Text>
+              {!night && (
+                <TouchableOpacity
+                  style={[styles.addResaBtn, { backgroundColor: C.gold }]}
+                  onPress={() => onAddResa("🌙 Nuit")}
+                >
+                  <Text style={[styles.addResaBtnText, { color: "#0D1B2E" }]}>+ Ajouter</Text>
+                </TouchableOpacity>
               )}
             </View>
-            <View style={styles.slotRight}>
-              {night
-                ? <Text style={[styles.slotFull, { color: C.danger }]}>Occupé</Text>
-                : <Text style={[styles.slotAvail, { color: C.gold }]}>Disponible</Text>
-              }
-            </View>
+            {night ? (
+              <View style={[styles.resaRow, { borderColor: C.border }]}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.resaName, { color: C.success }]}>● {night.prenom} {night.nom}</Text>
+                  {night.telephone ? (
+                    <Text style={[styles.resaTel, { color: C.muted }]}>{night.telephone}</Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  style={[styles.deleteResaBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
+                  onPress={() => onDeleteResa(night)}
+                >
+                  <Text style={{ color: "#e94560", fontSize: 13 }}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={[styles.slotEmpty, { color: C.muted }]}>Aucun visiteur inscrit</Text>
+            )}
           </View>
         );
       })()}
@@ -369,23 +654,23 @@ function DayView({ day, reservations, slots, slotConfig, spaceId, C, onBack, onP
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
   scroll: { padding: 16, paddingBottom: 32 },
   header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    paddingHorizontal: 16,
-    paddingTop: 52,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingHorizontal: 14, paddingTop: 52, paddingBottom: 12, borderBottomWidth: 1,
   },
-  headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18 },
-  headerSub: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 2 },
+  headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 17 },
+  headerSub: { fontFamily: "DM_Sans_400Regular", fontSize: 11, marginTop: 2 },
+  inviteBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  inviteBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
   emptyTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 22, marginBottom: 16, textAlign: "center" },
   emptyText: { fontFamily: "DM_Sans_400Regular", fontSize: 14, textAlign: "center", lineHeight: 22 },
+
+  // Calendar
   nextDispoBtn: { borderRadius: 12, paddingVertical: 14, alignItems: "center", marginBottom: 20 },
   nextDispoText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
   monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
@@ -396,13 +681,8 @@ const styles = StyleSheet.create({
   dayLabel: { flex: 1, textAlign: "center", fontFamily: "DM_Sans_600SemiBold", fontSize: 11 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 3, marginBottom: 16 },
   cell: {
-    width: "13.28%",
-    aspectRatio: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
+    width: "13.28%", aspectRatio: 1, borderRadius: 8, borderWidth: 1,
+    alignItems: "center", justifyContent: "center", paddingVertical: 4,
   },
   cellDate: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
   dot: { width: 5, height: 5, borderRadius: 3, marginTop: 3 },
@@ -410,51 +690,70 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
-  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.8)", justifyContent: "center", alignItems: "center", padding: 24 },
-  modal: {
-    width: "100%",
-    maxWidth: 340,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 24,
-    alignItems: "center",
-  },
+
+  // Modals
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modal: { width: "100%", maxWidth: 340, borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center" },
   modalEmoji: { fontSize: 32, marginBottom: 8 },
-  modalLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 },
+  modalLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 },
   modalDate: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18, textTransform: "capitalize", textAlign: "center", marginBottom: 6 },
   modalSlot: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 36, marginBottom: 20 },
-  modalButtons: { flexDirection: "row", gap: 10, width: "100%" },
+  modalButtons: { flexDirection: "row", gap: 10, width: "100%", marginTop: 16 },
   modalBtnSecondary: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 13, alignItems: "center" },
   modalBtnSecondaryText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
-  modalBtnPrimary: { flex: 1.3, borderRadius: 10, paddingVertical: 13, alignItems: "center" },
+  modalBtnPrimary: { flex: 1.3, borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
   modalBtnPrimaryText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
-  backBtn: { marginBottom: 14 },
+
+  // Invite sheet
+  inviteSheet: {
+    width: "100%", maxWidth: 380, borderRadius: 20, borderWidth: 1,
+    padding: 24, paddingBottom: 36, alignItems: "center",
+  },
+  inviteTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18, marginBottom: 6, textAlign: "center" },
+  inviteSub: { fontFamily: "DM_Sans_400Regular", fontSize: 13, textAlign: "center", marginBottom: 20 },
+  qrContainer: { borderRadius: 16, padding: 16, marginBottom: 16, borderWidth: 1 },
+  linkBox: { borderWidth: 1, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, width: "100%", marginBottom: 12 },
+  linkText: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
+  inviteActionBtn: { borderRadius: 10, paddingVertical: 13, paddingHorizontal: 20, width: "100%", alignItems: "center", marginBottom: 10 },
+  inviteActionBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
+  inviteRow: { flexDirection: "row", gap: 8, width: "100%" },
+  inviteSmallBtn: { flex: 1, borderRadius: 10, paddingVertical: 11, alignItems: "center" },
+  inviteSmallBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 12, color: "#fff" },
+
+  // Add resa form (reuses inviteSheet)
+  input: { borderWidth: 1, borderRadius: 10, padding: 12, fontFamily: "DM_Sans_400Regular", fontSize: 15, marginBottom: 10, width: "100%" },
+
+  // Day view
+  dayViewTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  backBtn: {},
   backText: { fontFamily: "DM_Sans_400Regular", fontSize: 14 },
+  newsBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  newsBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
   dayNav: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 14,
-    borderRadius: 14,
-    borderWidth: 1,
-    marginBottom: 16,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    padding: 14, borderRadius: 14, borderWidth: 1, marginBottom: 16,
   },
   dayTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 16, textTransform: "capitalize" },
   daySub: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 2 },
-  slotCard: {
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+  slotCard: { borderWidth: 1, borderRadius: 12, padding: 14, marginBottom: 10 },
+  slotHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
+  slotTime: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 22, flex: 1 },
+  slotCount: { fontFamily: "DM_Sans_400Regular", fontSize: 12 },
+  slotEmpty: { fontFamily: "DM_Sans_400Regular", fontSize: 13 },
+  fullTag: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
+  addResaBtn: { borderRadius: 7, paddingVertical: 6, paddingHorizontal: 10 },
+  addResaBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 12, color: "#fff" },
+  resaRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    borderTopWidth: 1, paddingTop: 8, marginTop: 6,
   },
-  slotLeft: { flex: 1 },
-  slotRight: { justifyContent: "center", paddingLeft: 10 },
-  slotTime: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 22 },
-  slotCount: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 2 },
-  slotName: { fontFamily: "DM_Sans_400Regular", fontSize: 13, marginTop: 3 },
-  slotAvail: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
-  slotFull: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
+  resaName: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
+  resaTel: { fontFamily: "DM_Sans_400Regular", fontSize: 11, marginTop: 2 },
+  deleteResaBtn: { width: 28, height: 28, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+
+  toast: {
+    position: "absolute", bottom: 24, alignSelf: "center",
+    paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10,
+  },
+  toastText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "#fff" },
 });
