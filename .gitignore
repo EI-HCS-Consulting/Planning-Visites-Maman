@@ -17,6 +17,7 @@ yarn-error.log*
 
 # EAS
 .eas/
+google-play-service-account.json
 
 # OS
 .DS_Store

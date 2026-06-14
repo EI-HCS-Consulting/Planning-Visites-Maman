@@ -8,6 +8,15 @@
     "scheme": "avectoi",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash.png",
+      "backgroundColor": "#0D1B2E",
+      "resizeMode": "contain"
+    },
+    "notification": {
+      "color": "#F0B429",
+      "androidMode": "default"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -15,6 +24,9 @@
       },
       "package": "care.avectoi.app",
       "versionCode": 1,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "permissions": [
         "android.permission.CAMERA",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -29,7 +41,13 @@
     },
     "plugins": [
       "expo-router",
-      "expo-notifications",
+      [
+        "expo-notifications",
+        {
+          "color": "#F0B429",
+          "defaultChannel": "visits"
+        }
+      ],
       [
         "expo-image-picker",
         {
@@ -46,6 +64,12 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+      }
+    },
+    "owner": "ei-hcs-consulting"
   }
 }
