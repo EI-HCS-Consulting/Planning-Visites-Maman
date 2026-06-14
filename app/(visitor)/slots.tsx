@@ -47,7 +47,6 @@ async function addToNativeCalendar(
     const target = calendars.find((c) => c.isPrimary && c.allowsModifications) ?? calendars.find((c) => c.allowsModifications);
     if (!target) return false;
 
-    const [h, m] = slot.split(":").map(Number);
     const startDate = new Date(`${iso}T${slot}:00`);
     let endDate: Date;
 
