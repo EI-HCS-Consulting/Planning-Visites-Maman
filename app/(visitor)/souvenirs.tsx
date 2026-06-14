@@ -1,16 +1,19 @@
-import { View, Text, StyleSheet } from "react-native";
+import { useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
-const C = themes.blue;
+import SouvenirsGallery from "@/components/SouvenirsGallery";
+import { View, ActivityIndicator } from "react-native";
+
 export default function VisitorSouvenirsScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Souvenirs</Text>
-      <Text style={styles.sub}>Galerie partagée — tâche 5</Text>
-    </View>
-  );
+  const { space } = useVisitorSpace();
+  const C = themes[space?.theme ?? "blue"];
+
+  if (!space) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={C.accent} size="large" />
+      </View>
+    );
+  }
+
+  return <SouvenirsGallery spaceId={space.id} C={C} isAdmin={false} />;
 }
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center", padding: 24 },
-  title: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 24, color: "#fff", marginBottom: 12 },
-  sub: { fontFamily: "DM_Sans_400Regular", fontSize: 14, color: C.muted, textAlign: "center" },
-});
