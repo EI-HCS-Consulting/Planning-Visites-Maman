@@ -1,19 +1,32 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { useSpace } from "@/lib/SpaceContext";
 import { themes } from "@/lib/themes";
-
-const C = themes.blue;
+import EntraideSoutien from "@/components/EntraideSoutien";
 
 export default function AdminEntraideScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Entraide & Soutien</Text>
-      <Text style={styles.sub}>Besoins + Mur de soutien — à implémenter (tâche 7)</Text>
-    </View>
-  );
+  const { space, loading, hasSpace } = useSpace();
+  const C = themes[space?.theme ?? "blue"];
+
+  if (loading) {
+    return (
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
+        <ActivityIndicator color={C.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (!hasSpace || !space) {
+    return (
+      <View style={[styles.center, { backgroundColor: C.bg }]}>
+        <Text style={[styles.msg, { color: C.muted }]}>Aucun espace patient actif.</Text>
+      </View>
+    );
+  }
+
+  return <EntraideSoutien spaceId={space.id} C={C} isAdmin={true} />;
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center", padding: 24 },
-  title: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 24, color: "#fff", marginBottom: 12 },
-  sub: { fontFamily: "DM_Sans_400Regular", fontSize: 14, color: C.muted, textAlign: "center" },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
+  msg: { fontFamily: "DM_Sans_400Regular", fontSize: 15, textAlign: "center" },
 });

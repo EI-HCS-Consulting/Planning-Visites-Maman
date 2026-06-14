@@ -1,16 +1,19 @@
-import { View, Text, StyleSheet } from "react-native";
+import { View, ActivityIndicator } from "react-native";
+import { useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
-const C = themes.blue;
+import EntraideSoutien from "@/components/EntraideSoutien";
+
 export default function VisitorEntraideScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Entraide & Soutien</Text>
-      <Text style={styles.sub}>Besoins + Mur de soutien — tâche 7</Text>
-    </View>
-  );
+  const { space } = useVisitorSpace();
+  const C = themes[space?.theme ?? "blue"];
+
+  if (!space) {
+    return (
+      <View style={{ flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center" }}>
+        <ActivityIndicator color={C.accent} size="large" />
+      </View>
+    );
+  }
+
+  return <EntraideSoutien spaceId={space.id} C={C} isAdmin={false} />;
 }
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: C.bg, alignItems: "center", justifyContent: "center", padding: 24 },
-  title: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 24, color: "#fff", marginBottom: 12 },
-  sub: { fontFamily: "DM_Sans_400Regular", fontSize: 14, color: C.muted, textAlign: "center" },
-});
