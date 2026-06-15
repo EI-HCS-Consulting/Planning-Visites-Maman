@@ -23,7 +23,6 @@
         "backgroundColor": "#0D1B2E"
       },
       "package": "care.avectoi.app",
-      "versionCode": 1,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ],
@@ -60,16 +59,21 @@
         {
           "calendarPermission": "AvecToi accède à votre calendrier pour ajouter vos créneaux de visite."
         }
-      ]
+      ],
+      "expo-font",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
     },
+    "owner": "ei-hcs-consulting",
     "extra": {
+      "router": {
+        "origin": false
+      },
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
+        "projectId": "305abfe3-5d04-449f-9b06-8975f2196588"
       }
-    },
-    "owner": "ei-hcs-consulting"
+    }
   }
 }

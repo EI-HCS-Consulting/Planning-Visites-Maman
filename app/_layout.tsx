@@ -14,7 +14,7 @@ import {
 } from "@expo-google-fonts/playfair-display";
 
 export default function RootLayout() {
-  const [fontsLoaded] = useFonts({
+  const [fontsLoaded, fontError] = useFonts({
     DM_Sans_400Regular,
     DM_Sans_600SemiBold,
     DM_Sans_700Bold,
@@ -22,7 +22,7 @@ export default function RootLayout() {
     PlayfairDisplay_400Regular,
   });
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded && !fontError) {
     return <View style={{ flex: 1, backgroundColor: "#0D1B2E" }} />;
   }
 

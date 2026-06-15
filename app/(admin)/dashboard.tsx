@@ -370,52 +370,64 @@ export default function DashboardScreen() {
           <TouchableOpacity activeOpacity={1}>
             <View style={[styles.inviteSheet, { backgroundColor: C.card, borderColor: C.accent }]}>
               <Text style={[styles.inviteTitle, { color: "#fff" }]}>🔗 Partager l'invitation</Text>
-              <Text style={[styles.inviteSub, { color: C.muted }]}>
-                Envoie ce lien aux proches pour qu'ils rejoignent l'espace.
-              </Text>
 
-              {/* QR Code */}
-              <View style={[styles.qrContainer, { backgroundColor: "#fff", borderColor: C.border }]}>
-                <QRCode value={link} size={160} backgroundColor="#fff" color="#0D1B2E" />
-              </View>
+              {space?.premium ? (
+                <>
+                  <Text style={[styles.inviteSub, { color: C.muted }]}>
+                    Envoie ce lien aux proches pour qu'ils rejoignent l'espace.
+                  </Text>
 
-              {/* Link display */}
-              <View style={[styles.linkBox, { backgroundColor: C.bg, borderColor: C.border }]}>
-                <Text style={[styles.linkText, { color: C.muted }]} numberOfLines={1} ellipsizeMode="middle">
-                  {link}
-                </Text>
-              </View>
+                  {/* QR Code */}
+                  <View style={[styles.qrContainer, { backgroundColor: "#fff", borderColor: C.border }]}>
+                    <QRCode value={link} size={160} backgroundColor="#fff" color="#0D1B2E" />
+                  </View>
 
-              {/* Action buttons */}
-              <TouchableOpacity
-                style={[styles.inviteActionBtn, { backgroundColor: C.accent }]}
-                onPress={handleCopyLink}
-              >
-                <Text style={styles.inviteActionBtnText}>
-                  {copied ? "✓ Copié !" : "📋 Copier le lien"}
-                </Text>
-              </TouchableOpacity>
+                  {/* Link display */}
+                  <View style={[styles.linkBox, { backgroundColor: C.bg, borderColor: C.border }]}>
+                    <Text style={[styles.linkText, { color: C.muted }]} numberOfLines={1} ellipsizeMode="middle">
+                      {link}
+                    </Text>
+                  </View>
 
-              <View style={styles.inviteRow}>
-                <TouchableOpacity
-                  style={[styles.inviteSmallBtn, { backgroundColor: "#25D366" }]}
-                  onPress={handleWhatsApp}
-                >
-                  <Text style={styles.inviteSmallBtnText}>WhatsApp</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
-                  onPress={handleSMS}
-                >
-                  <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>💬 SMS</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
-                  onPress={handleShareLink}
-                >
-                  <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>⬆️ Partager</Text>
-                </TouchableOpacity>
-              </View>
+                  {/* Action buttons */}
+                  <TouchableOpacity
+                    style={[styles.inviteActionBtn, { backgroundColor: C.accent }]}
+                    onPress={handleCopyLink}
+                  >
+                    <Text style={styles.inviteActionBtnText}>
+                      {copied ? "✓ Copié !" : "📋 Copier le lien"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <View style={styles.inviteRow}>
+                    <TouchableOpacity
+                      style={[styles.inviteSmallBtn, { backgroundColor: "#25D366" }]}
+                      onPress={handleWhatsApp}
+                    >
+                      <Text style={styles.inviteSmallBtnText}>WhatsApp</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
+                      onPress={handleSMS}
+                    >
+                      <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>💬 SMS</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.inviteSmallBtn, { backgroundColor: C.border }]}
+                      onPress={handleShareLink}
+                    >
+                      <Text style={[styles.inviteSmallBtnText, { color: C.text }]}>⬆️ Partager</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.lockedInvite}>
+                  <Text style={styles.lockedEmoji}>🔒</Text>
+                  <Text style={[styles.lockedText, { color: C.muted }]}>
+                    Le partage sera disponible une fois votre espace validé. Consultez l'email envoyé à votre adresse.
+                  </Text>
+                </View>
+              )}
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -719,6 +731,11 @@ const styles = StyleSheet.create({
   inviteRow: { flexDirection: "row", gap: 8, width: "100%" },
   inviteSmallBtn: { flex: 1, borderRadius: 10, paddingVertical: 11, alignItems: "center" },
   inviteSmallBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 12, color: "#fff" },
+
+  // Locked invite (non-premium)
+  lockedInvite: { alignItems: "center", paddingVertical: 24, width: "100%" },
+  lockedEmoji: { fontSize: 40, marginBottom: 16 },
+  lockedText: { fontFamily: "DM_Sans_400Regular", fontSize: 14, textAlign: "center", lineHeight: 22 },
 
   // Add resa form (reuses inviteSheet)
   input: { borderWidth: 1, borderRadius: 10, padding: 12, fontFamily: "DM_Sans_400Regular", fontSize: 15, marginBottom: 10, width: "100%" },

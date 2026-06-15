@@ -128,6 +128,16 @@ export default function SlotsScreen() {
   }
 
   function openBooking(target: BookingTarget) {
+    if (target.type === "Visite" && !space?.premium) {
+      const visitCount = reservations.filter(r => r.type === "Visite").length;
+      if (visitCount >= 5) {
+        Alert.alert(
+          "Limite atteinte",
+          "Vous avez atteint la limite de votre espace. Consultez l'email envoyé à votre adresse pour en savoir plus.",
+        );
+        return;
+      }
+    }
     setPrenom(""); setNom(""); setTel(""); setPinValue("");
     setBookingTarget(target);
     setConfirmed(null);

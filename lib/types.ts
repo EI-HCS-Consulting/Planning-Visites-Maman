@@ -17,6 +17,7 @@ export interface PatientSpace {
   start_date: string;
   end_date: string;
   is_active: boolean;
+  premium: boolean;
   invite_token: string;
   stripe_payment_id: string | null;
   last_activity_at: string;

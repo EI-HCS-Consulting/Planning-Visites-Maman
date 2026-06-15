@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
-  Alert, ActivityIndicator, Image,
+  Alert, ActivityIndicator, Image, TextInput, Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -26,7 +26,7 @@ const THEME_ORDER: ThemeKey[] = ["blue", "red", "pink", "green", "yellow", "oran
 
 export default function SettingsScreen() {
   const router = useRouter();
-  const { space, loading, hasSpace } = useSpace();
+  const { space, slotConfig, loading, hasSpace } = useSpace();
   const C = themes[space?.theme ?? "blue"];
 
   const [themeUpdating, setThemeUpdating] = useState(false);
@@ -34,9 +34,49 @@ export default function SettingsScreen() {
   const [prolonging, setProlonging] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Admin notes
+  const notesInit = useRef(false);
+  const [notes, setNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  useEffect(() => {
+    if (space && !notesInit.current) {
+      notesInit.current = true;
+      setNotes(space.admin_notes ?? "");
+    }
+  }, [space]);
+
+  // Nuitées toggle
+  const [nightToggling, setNightToggling] = useState(false);
+
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 3000);
+  }
+
+  // ── Admin notes ────────────────────────────────────────────────────────────
+  async function handleSaveNotes() {
+    if (!space) return;
+    setNotesSaving(true);
+    const { error } = await supabase
+      .from("patient_spaces")
+      .update({ admin_notes: notes.trim() })
+      .eq("id", space.id);
+    setNotesSaving(false);
+    if (error) showToast("Erreur lors de la sauvegarde.");
+    else showToast("Message enregistré ✓");
+  }
+
+  // ── Nuitées toggle ─────────────────────────────────────────────────────────
+  async function handleToggleNight() {
+    if (!slotConfig) return;
+    setNightToggling(true);
+    const { error } = await supabase
+      .from("slot_config")
+      .update({ night_enabled: !slotConfig.night_enabled })
+      .eq("id", slotConfig.id);
+    setNightToggling(false);
+    if (error) showToast("Erreur lors de la mise à jour.");
+    else showToast(slotConfig.night_enabled ? "Nuitées suspendues ✓" : "Nuitées activées ✓");
   }
 
   // ── Theme switch ───────────────────────────────────────────────────────────
@@ -305,6 +345,66 @@ export default function SettingsScreen() {
                 })}
               </View>
             </View>
+            {/* ── Section : Message de l'organisateur ──────────────────────── */}
+            <Text style={[styles.sectionTitle, { color: C.gold }]}>Message de l'organisateur</Text>
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.cardDesc, { color: C.muted }]}>
+                Affiché aux visiteurs dans l'onglet Infos.
+              </Text>
+              <Text style={[styles.warningText, { color: C.orange }]}>
+                ⚠️ N'indiquez pas d'informations médicales sensibles.
+              </Text>
+              <TextInput
+                style={[styles.notesInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                placeholder="Ex : La chambre se trouve au 3ème étage, aile B…"
+                placeholderTextColor={C.muted}
+                value={notes}
+                onChangeText={setNotes}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={[styles.saveNotesBtn, { backgroundColor: C.accent }, notesSaving && { opacity: 0.6 }]}
+                onPress={handleSaveNotes}
+                disabled={notesSaving}
+              >
+                {notesSaving
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.saveNotesBtnText}>Enregistrer le message</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Section : Nuitées ─────────────────────────────────────────── */}
+            {slotConfig && (
+              <>
+                <Text style={[styles.sectionTitle, { color: C.gold }]}>Nuitées</Text>
+                <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <View style={styles.nightRow}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.nightLabel, { color: "#fff" }]}>
+                        {slotConfig.night_enabled ? "Nuitées activées" : "Nuitées suspendues"}
+                      </Text>
+                      <Text style={[styles.nightDesc, { color: C.muted }]}>
+                        {slotConfig.night_enabled
+                          ? "Les visiteurs peuvent réserver une nuit (18h → 11h)."
+                          : "Le bloc nuit est masqué pour les visiteurs."}
+                      </Text>
+                    </View>
+                    {nightToggling
+                      ? <ActivityIndicator color={C.accent} />
+                      : <Switch
+                          value={slotConfig.night_enabled}
+                          onValueChange={handleToggleNight}
+                          trackColor={{ false: C.border, true: C.accent }}
+                          thumbColor="#fff"
+                        />
+                    }
+                  </View>
+                </View>
+              </>
+            )}
           </>
         ) : (
           <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -443,6 +543,21 @@ const styles = StyleSheet.create({
   rgpdDays: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginTop: 4 },
   prolongBtn: { borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
   prolongBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
+
+  // Admin notes
+  warningText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginBottom: 10 },
+  notesInput: {
+    borderWidth: 1, borderRadius: 10, padding: 12,
+    fontFamily: "DM_Sans_400Regular", fontSize: 14,
+    minHeight: 100, marginBottom: 12,
+  },
+  saveNotesBtn: { borderRadius: 10, paddingVertical: 12, alignItems: "center", justifyContent: "center" },
+  saveNotesBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
+
+  // Nuitées
+  nightRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  nightLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15, marginBottom: 4 },
+  nightDesc: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 18 },
 
   // Logout
   logoutBtn: {
