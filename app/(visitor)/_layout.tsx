@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, Modal, StyleSheet, ActivityIndicator } from "react-native";
-import { Tabs, useLocalSearchParams, useRouter } from "expo-router";
+import { Tabs, useGlobalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { VisitorSpaceProvider, useVisitorSpace } from "@/lib/VisitorContext";
@@ -161,7 +161,12 @@ const consentStyles = StyleSheet.create({
 });
 
 export default function VisitorLayout() {
-  const { token } = useLocalSearchParams<{ token: string }>();
+  // useGlobalSearchParams (not useLocalSearchParams): this layout is now two
+  // levels above the actual screens (Tabs > home Stack > calendar/slots/...),
+  // so the token/spaceId query params attached to e.g. "/(visitor)/home/calendar"
+  // aren't visible to a *local* params read way up here — only the global,
+  // whole-URL search params are.
+  const { token } = useGlobalSearchParams<{ token: string }>();
 
   return (
     <VisitorSpaceProvider token={token ?? ""}>
