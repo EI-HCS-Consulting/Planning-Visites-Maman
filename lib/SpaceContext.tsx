@@ -12,6 +12,10 @@ interface SpaceContextValue {
   hasSpace: boolean;
   selectedDay: Date;
   setSelectedDay: (day: Date) => void;
+  // Same pattern as VisitorContext — "Prochaine disponibilité → Réserver"
+  // sets this so the Créneaux screen auto-opens the add-reservation modal.
+  pendingBookingSlot: string | null;
+  setPendingBookingSlot: (slot: string | null) => void;
   refreshReservations: () => Promise<void>;
   refreshSpace: () => Promise<void>;
 }
@@ -25,6 +29,8 @@ const SpaceContext = createContext<SpaceContextValue>({
   hasSpace: false,
   selectedDay: new Date(),
   setSelectedDay: () => {},
+  pendingBookingSlot: null,
+  setPendingBookingSlot: () => {},
   refreshReservations: async () => {},
   refreshSpace: async () => {},
 });
@@ -44,6 +50,7 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [pendingBookingSlot, setPendingBookingSlot] = useState<string | null>(null);
 
   const fetchSpace = useCallback(async () => {
     const { data: spaceData } = await supabase
@@ -131,7 +138,7 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
 
   return (
     <SpaceContext.Provider
-      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, selectedDay, setSelectedDay, refreshReservations, refreshSpace }}
+      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, selectedDay, setSelectedDay, pendingBookingSlot, setPendingBookingSlot, refreshReservations, refreshSpace }}
     >
       {children}
     </SpaceContext.Provider>

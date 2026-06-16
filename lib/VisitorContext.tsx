@@ -12,6 +12,12 @@ interface VisitorContextValue {
   token: string;
   selectedDay: Date;
   setSelectedDay: (day: Date) => void;
+  // Set by "Prochaine disponibilité" 's "Réserver" button (Calendrier) so the
+  // Créneaux screen can auto-open the booking modal on mount, pre-targeted —
+  // shared via context rather than a route param, since query params don't
+  // reliably survive navigation through the Tabs > home Stack nesting.
+  pendingBookingSlot: string | null;
+  setPendingBookingSlot: (slot: string | null) => void;
   refreshReservations: () => Promise<void>;
 }
 
@@ -24,6 +30,8 @@ const VisitorContext = createContext<VisitorContextValue>({
   token: "",
   selectedDay: new Date(),
   setSelectedDay: () => {},
+  pendingBookingSlot: null,
+  setPendingBookingSlot: () => {},
   refreshReservations: async () => {},
 });
 
@@ -42,6 +50,7 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
     d.setHours(0, 0, 0, 0);
     return d;
   });
+  const [pendingBookingSlot, setPendingBookingSlot] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) { setLoading(false); return; }
@@ -115,7 +124,7 @@ export function VisitorSpaceProvider({ token, children }: { token: string; child
   }, [space?.id, refreshReservations]);
 
   return (
-    <VisitorContext.Provider value={{ space, slotConfig, slots, reservations, loading, token, selectedDay, setSelectedDay, refreshReservations }}>
+    <VisitorContext.Provider value={{ space, slotConfig, slots, reservations, loading, token, selectedDay, setSelectedDay, pendingBookingSlot, setPendingBookingSlot, refreshReservations }}>
       {children}
     </VisitorContext.Provider>
   );

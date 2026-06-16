@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import {
-  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert,
+  View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal,
 } from "react-native";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import {
@@ -14,8 +14,9 @@ import { useRouter } from "expo-router";
 const DAY_LABELS = ["L", "M", "M", "J", "V", "S", "D"];
 
 export default function VisitorCalendarScreen() {
-  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay } = useVisitorSpace();
+  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, setPendingBookingSlot } = useVisitorSpace();
   const router = useRouter();
+  const [nextDispoModal, setNextDispoModal] = useState<{ date: Date; iso: string; slot: string } | null>(null);
 
   const C = themes[space?.theme ?? "blue"];
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -36,12 +37,26 @@ export default function VisitorCalendarScreen() {
     if (!slotConfig) return;
     const result = findNextAvailableSlot(reservations, slotConfig, slots, startDate);
     if (result) {
-      setSelectedDay(result.date);
-      setCalMonth({ year: result.date.getFullYear(), month: result.date.getMonth() });
-      router.navigate("/(visitor)/home/slots");
+      setNextDispoModal(result);
     } else {
       Alert.alert("Aucune disponibilité", "Aucun créneau libre dans les 90 prochains jours.");
     }
+  }
+
+  function goToDay() {
+    if (!nextDispoModal) return;
+    setSelectedDay(nextDispoModal.date);
+    setCalMonth({ year: nextDispoModal.date.getFullYear(), month: nextDispoModal.date.getMonth() });
+    setNextDispoModal(null);
+    router.navigate("/(visitor)/home/slots");
+  }
+
+  function reserveNow() {
+    if (!nextDispoModal) return;
+    setSelectedDay(nextDispoModal.date);
+    setPendingBookingSlot(nextDispoModal.slot);
+    setNextDispoModal(null);
+    router.navigate("/(visitor)/home/slots");
   }
 
   if (!space || !slotConfig) return null;
@@ -147,6 +162,33 @@ export default function VisitorCalendarScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* ── MODAL PROCHAINE DISPONIBILITÉ ──────────────────────────────────── */}
+      <Modal transparent visible={!!nextDispoModal} animationType="fade" onRequestClose={() => setNextDispoModal(null)}>
+        <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setNextDispoModal(null)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modal, { backgroundColor: C.card, borderColor: C.accent }]}>
+            <Text style={styles.modalEmoji}>⚡</Text>
+            <Text style={[styles.modalLabel, { color: C.gold }]}>Prochaine disponibilité</Text>
+            <Text style={[styles.modalDate, { color: "#fff" }]}>
+              {nextDispoModal && toFrLong(nextDispoModal.date)}
+            </Text>
+            <Text style={[styles.modalSlot, { color: C.gold }]}>{nextDispoModal?.slot}</Text>
+            {!!slotConfig && (
+              <Text style={[styles.modalMeta, { color: C.muted }]}>
+                Visite de {slotConfig.slot_duration_minutes} min max · {slotConfig.max_visitors_per_slot} personne{slotConfig.max_visitors_per_slot > 1 ? "s" : ""} max
+              </Text>
+            )}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalBtnSecondary, { borderColor: C.border }]} onPress={goToDay}>
+                <Text style={[styles.modalBtnSecondaryText, { color: C.muted }]}>Voir le jour</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalBtnPrimary, { backgroundColor: C.accent }]} onPress={reserveNow}>
+                <Text style={styles.modalBtnPrimaryText}>✓ Réserver</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -178,4 +220,17 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
+
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", alignItems: "center", padding: 20 },
+  modal: { width: "100%", maxWidth: 340, borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center" },
+  modalEmoji: { fontSize: 32, marginBottom: 8 },
+  modalLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 },
+  modalDate: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18, textTransform: "capitalize", textAlign: "center", marginBottom: 6 },
+  modalSlot: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 36, marginBottom: 8 },
+  modalMeta: { fontFamily: "DM_Sans_400Regular", fontSize: 12, textAlign: "center", marginBottom: 12 },
+  modalButtons: { flexDirection: "row", gap: 10, width: "100%", marginTop: 8 },
+  modalBtnSecondary: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 13, alignItems: "center" },
+  modalBtnSecondaryText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
+  modalBtnPrimary: { flex: 1.3, borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
+  modalBtnPrimaryText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
 });

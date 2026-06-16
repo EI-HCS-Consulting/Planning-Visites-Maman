@@ -86,7 +86,10 @@ async function updateLastActivity(spaceId: string) {
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SlotsScreen() {
   const ctx = useVisitorSpace();
-  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token } = ctx;
+  const {
+    space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token,
+    pendingBookingSlot, setPendingBookingSlot,
+  } = ctx;
   const C = themes[space?.theme ?? "blue"];
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -106,11 +109,6 @@ export default function SlotsScreen() {
   // à l'ouverture de la modale de réservation. Le PIN reste toujours à saisir.
   const [savedPrenom, setSavedPrenom] = useState("");
   const [savedNom, setSavedNom] = useState("");
-  useEffect(() => {
-    getVisitorSession().then((s) => {
-      if (s) { setSavedPrenom(s.prenom); setSavedNom(s.nom); }
-    });
-  }, []);
 
   // ── Modal state ─────────────────────────────────────────────────────────────
   const [bookingTarget, setBookingTarget] = useState<BookingTarget | null>(null);
@@ -139,7 +137,7 @@ export default function SlotsScreen() {
     setTimeout(() => setToast(""), 3200);
   }
 
-  function openBooking(target: BookingTarget) {
+  function openBooking(target: BookingTarget, prefill?: { prenom: string; nom: string }) {
     if (target.type === "Visite" && isSlotPast(toISO(selectedDay), target.slot)) {
       showToast("Ce créneau est déjà passé.");
       return;
@@ -154,11 +152,25 @@ export default function SlotsScreen() {
         return;
       }
     }
-    setPrenom(savedPrenom); setNom(savedNom); setTel(""); setPinValue("");
+    setPrenom(prefill?.prenom ?? savedPrenom); setNom(prefill?.nom ?? savedNom); setTel(""); setPinValue("");
     setBookingTarget(target);
     setConfirmed(null);
     setCalendarAdded(false);
   }
+
+  // Charge l'identité connue depuis le compte visiteur ; si on arrive ici
+  // via "Prochaine disponibilité → Réserver" (Calendrier), ouvre directement
+  // la modale de réservation sur le créneau ciblé.
+  useEffect(() => {
+    getVisitorSession().then((s) => {
+      if (s) { setSavedPrenom(s.prenom); setSavedNom(s.nom); }
+      if (pendingBookingSlot) {
+        openBooking({ slot: pendingBookingSlot, type: "Visite" }, s ? { prenom: s.prenom, nom: s.nom } : undefined);
+        setPendingBookingSlot(null);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function openPinModal(r: Reservation) {
     setPinModal(r);

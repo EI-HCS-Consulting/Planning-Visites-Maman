@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Modal, Alert, TextInput, ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -14,7 +14,10 @@ import type { Reservation } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
 
 export default function AdminSlotsScreen() {
-  const { space, slotConfig, reservations, selectedDay, setSelectedDay, refreshReservations } = useSpace();
+  const {
+    space, slotConfig, reservations, selectedDay, setSelectedDay, refreshReservations,
+    pendingBookingSlot, setPendingBookingSlot,
+  } = useSpace();
   const C = themes[space?.theme ?? "blue"];
 
   const startDate = space ? new Date(space.start_date + "T00:00:00") : new Date();
@@ -35,6 +38,16 @@ export default function AdminSlotsScreen() {
     setAddSlot(slot);
     setAddPrenom(""); setAddNom(""); setAddTel("");
   }
+
+  // Arrivée via "Prochaine disponibilité → Ajouter" (Calendrier) : ouvre
+  // directement la modale d'ajout sur le créneau ciblé.
+  useEffect(() => {
+    if (pendingBookingSlot) {
+      openAddResa(pendingBookingSlot);
+      setPendingBookingSlot(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleAddResa() {
     if (!space || !addSlot || !addPrenom.trim() || !addNom.trim()) return;
