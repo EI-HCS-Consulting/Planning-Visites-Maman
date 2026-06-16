@@ -34,17 +34,15 @@ export function getDayStatus(
 
   if (d < start || d < today) return "past";
 
-  const dayResas = reservations.filter((r) => r.date === iso);
-  const visits = dayResas.filter((r) => r.type === "Visite");
-  const night = dayResas.find((r) => r.type === "Nuit");
+  // Les nuitées ont leur propre écran (Nuits) et n'influencent plus le point
+  // de couleur du calendrier — uniquement basé sur l'occupation des
+  // créneaux "Visite" du jour.
+  const visits = reservations.filter((r) => r.date === iso && r.type === "Visite");
 
-  if (visits.length === 0 && !night) return "empty";
+  if (visits.length === 0) return "empty";
 
   const maxVisits = slots.length * config.max_visitors_per_slot;
-  const visitsAtMax = visits.length >= maxVisits;
-  const nightAtMax = !config.night_enabled || !!night;
-
-  if (visitsAtMax && nightAtMax) return "full";
+  if (visits.length >= maxVisits) return "full";
   return "partial";
 }
 
@@ -108,6 +106,38 @@ export function findNextAvailableSlot(
       if (occ.length < config.max_visitors_per_slot) {
         return { date: d, iso, slot };
       }
+    }
+  }
+  return null;
+}
+
+// Cherche la prochaine date sans nuitée déjà enregistrée (un seul créneau
+// "Nuit" par jour). Contrairement aux créneaux "Visite", l'heure du jour
+// n'entre pas en jeu : une nuitée se réserve pour 18h, même si on regarde
+// après 18h le jour même (cohérent avec le comportement existant de
+// l'ancienne carte "Nuit" dans Créneaux, qui n'a jamais filtré sur l'heure).
+export function findNextAvailableNight(
+  reservations: Reservation[],
+  config: SlotConfig,
+  startDate: Date,
+): { date: Date; iso: string } | null {
+  if (!config.night_enabled) return null;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const searchStart = new Date(startDate);
+  searchStart.setHours(0, 0, 0, 0);
+  if (today > searchStart) {
+    searchStart.setTime(today.getTime());
+  }
+
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(searchStart);
+    d.setDate(d.getDate() + i);
+    const iso = toISO(d);
+    if (!getNightReservation(reservations, iso)) {
+      return { date: d, iso };
     }
   }
   return null;

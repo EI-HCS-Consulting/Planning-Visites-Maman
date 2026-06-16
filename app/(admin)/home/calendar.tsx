@@ -160,6 +160,17 @@ export default function AdminCalendarScreen() {
             ),
           )}
         </View>
+
+        {/* Les nuitées n'apparaissent plus dans le calendrier — leur propre écran */}
+        {slotConfig.night_enabled && (
+          <TouchableOpacity
+            style={[styles.nightsBtn, { borderColor: C.gold }]}
+            onPress={() => router.navigate("/(admin)/home/nights")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.nightsBtnText, { color: C.gold }]}>🌙 Voir les nuitées</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* ── MODAL PROCHAINE DISPONIBILITÉ ──────────────────────────────────── */}
@@ -213,6 +224,9 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
+
+  nightsBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 20 },
+  nightsBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
 
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", alignItems: "center", padding: 20 },
   modal: { width: "100%", maxWidth: 340, borderRadius: 16, borderWidth: 1, padding: 24, alignItems: "center" },
