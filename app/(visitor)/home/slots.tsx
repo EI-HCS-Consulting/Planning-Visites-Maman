@@ -42,13 +42,24 @@ async function addToNativeCalendar(
   iso: string,
   slot: string,
   type: "Visite" | "Nuit",
+  preferredEmail: string | null,
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   try {
     const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
     if (status !== "granted") return { ok: false, reason: "Permission calendrier refusée." };
 
     const calendars = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
-    const target = calendars.find((c) => c.isPrimary && c.allowsModifications) ?? calendars.find((c) => c.allowsModifications);
+    const modifiable = calendars.filter((c) => c.allowsModifications);
+
+    // Prefer the calendar tied to the visitor's saved email (their Google
+    // account, synced) over the device's local-only calendar — otherwise
+    // events get created locally and never show up anywhere else.
+    const email = preferredEmail?.trim().toLowerCase();
+    const target =
+      (email && modifiable.find((c) => c.ownerAccount?.toLowerCase() === email)) ??
+      modifiable.find((c) => c.source && !c.source.isLocalAccount) ??
+      modifiable.find((c) => c.isPrimary) ??
+      modifiable[0];
     if (!target) return { ok: false, reason: "Aucun calendrier modifiable trouvé sur l'appareil." };
 
     const startDate = new Date(`${iso}T${slot}:00`);
@@ -341,7 +352,8 @@ export default function SlotsScreen() {
   // ─── Add to calendar ────────────────────────────────────────────────────────
   async function handleAddToCalendar() {
     if (!confirmed || !space || !slotConfig) return;
-    const result = await addToNativeCalendar(space, slotConfig, confirmed.iso, confirmed.slot, confirmed.type);
+    const session = await getVisitorSession();
+    const result = await addToNativeCalendar(space, slotConfig, confirmed.iso, confirmed.slot, confirmed.type, session?.email || null);
     if (result.ok) {
       setCalendarAdded(true);
       showToast("Créneau ajouté à votre calendrier ✓");
