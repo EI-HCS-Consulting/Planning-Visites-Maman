@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   Modal, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView,
@@ -8,7 +8,7 @@ import * as ExpoCalendar from "expo-calendar";
 import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { supabase } from "@/lib/supabase";
-import { saveVisitorSession } from "@/lib/visitorSession";
+import { getVisitorSession, saveVisitorSession } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
 import SpaceHeader from "@/components/SpaceHeader";
 import {
@@ -41,14 +41,14 @@ async function addToNativeCalendar(
   iso: string,
   slot: string,
   type: "Visite" | "Nuit",
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; reason: string }> {
   try {
     const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
-    if (status !== "granted") return false;
+    if (status !== "granted") return { ok: false, reason: "Permission calendrier refusée." };
 
     const calendars = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
     const target = calendars.find((c) => c.isPrimary && c.allowsModifications) ?? calendars.find((c) => c.allowsModifications);
-    if (!target) return false;
+    if (!target) return { ok: false, reason: "Aucun calendrier modifiable trouvé sur l'appareil." };
 
     const startDate = new Date(`${iso}T${slot}:00`);
     let endDate: Date;
@@ -70,9 +70,9 @@ async function addToNativeCalendar(
       alarms: [{ relativeOffset: -60 }],
     });
 
-    return true;
-  } catch {
-    return false;
+    return { ok: true };
+  } catch (e: any) {
+    return { ok: false, reason: e?.message ?? "Erreur inconnue." };
   }
 }
 
@@ -101,6 +101,16 @@ export default function SlotsScreen() {
   const [tel, setTel] = useState("");
   const [pinValue, setPinValue] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Prénom/nom déjà connus depuis le compte visiteur (Compte tab) — pré-remplis
+  // à l'ouverture de la modale de réservation. Le PIN reste toujours à saisir.
+  const [savedPrenom, setSavedPrenom] = useState("");
+  const [savedNom, setSavedNom] = useState("");
+  useEffect(() => {
+    getVisitorSession().then((s) => {
+      if (s) { setSavedPrenom(s.prenom); setSavedNom(s.nom); }
+    });
+  }, []);
 
   // ── Modal state ─────────────────────────────────────────────────────────────
   const [bookingTarget, setBookingTarget] = useState<BookingTarget | null>(null);
@@ -144,7 +154,7 @@ export default function SlotsScreen() {
         return;
       }
     }
-    setPrenom(""); setNom(""); setTel(""); setPinValue("");
+    setPrenom(savedPrenom); setNom(savedNom); setTel(""); setPinValue("");
     setBookingTarget(target);
     setConfirmed(null);
     setCalendarAdded(false);
@@ -317,12 +327,12 @@ export default function SlotsScreen() {
   // ─── Add to calendar ────────────────────────────────────────────────────────
   async function handleAddToCalendar() {
     if (!confirmed || !space || !slotConfig) return;
-    const ok = await addToNativeCalendar(space, slotConfig, confirmed.iso, confirmed.slot, confirmed.type);
-    if (ok) {
+    const result = await addToNativeCalendar(space, slotConfig, confirmed.iso, confirmed.slot, confirmed.type);
+    if (result.ok) {
       setCalendarAdded(true);
       showToast("Créneau ajouté à votre calendrier ✓");
     } else {
-      Alert.alert("Calendrier", "Impossible d'ajouter l'événement. Vérifiez les permissions.");
+      Alert.alert("Calendrier", "Impossible d'ajouter l'événement : " + result.reason);
     }
   }
 

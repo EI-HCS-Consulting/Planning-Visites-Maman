@@ -49,18 +49,19 @@ export default function SpaceHeader({
 
   return (
     <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-      <TouchableOpacity onPress={() => setLightbox(true)} style={styles.logoWrap} activeOpacity={0.85}>
-        {space.patient_photo_url ? (
-          <>
-            <Image source={{ uri: space.patient_photo_url }} style={styles.logoPhoto} resizeMode="cover" />
-            {/* eslint-disable-next-line @typescript-eslint/no-require-imports */}
-            <Image source={require("@/assets/icon-sans-512.png")} style={styles.logoFrame} resizeMode="contain" />
-          </>
-        ) : (
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
+      {space.patient_photo_url ? (
+        <TouchableOpacity onPress={() => setLightbox(true)} style={styles.logoWrap} activeOpacity={0.85}>
+          <Image source={{ uri: space.patient_photo_url }} style={styles.logoPhoto} resizeMode="cover" />
+          {/* eslint-disable-next-line @typescript-eslint/no-require-imports */}
+          <Image source={require("@/assets/icon-sans-512.png")} style={styles.logoFrame} resizeMode="contain" />
+        </TouchableOpacity>
+      ) : (
+        // No photo yet — plain (non-clickable) logo, nothing to enlarge.
+        <View style={styles.logoWrap}>
+          {/* eslint-disable-next-line @typescript-eslint/no-require-imports */}
           <Image source={require("@/assets/icon.png")} style={styles.logoFrame} resizeMode="contain" />
-        )}
-      </TouchableOpacity>
+        </View>
+      )}
 
       <Text style={[styles.title, { color: "#fff" }]}>
         Visites {space.patient_firstname}
@@ -100,18 +101,20 @@ export default function SpaceHeader({
         })}
       </View>
 
-      {/* ── Lightbox photo patient ──────────────────────────────────────── */}
-      <Modal visible={lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(false)}>
-        <TouchableOpacity style={styles.lightboxOverlay} activeOpacity={1} onPress={() => setLightbox(false)}>
-          <View style={[styles.lightboxCircle, { borderColor: C.gold }]}>
-            <Image
-              source={space.patient_photo_url ? { uri: space.patient_photo_url } : require("@/assets/icon.png")}
-              style={styles.lightboxImage}
-              resizeMode="cover"
-            />
-          </View>
-        </TouchableOpacity>
-      </Modal>
+      {/* ── Lightbox photo patient (uniquement si une photo existe) ───────── */}
+      {!!space.patient_photo_url && (
+        <Modal visible={lightbox} transparent animationType="fade" onRequestClose={() => setLightbox(false)}>
+          <TouchableOpacity style={styles.lightboxOverlay} activeOpacity={1} onPress={() => setLightbox(false)}>
+            <View style={[styles.lightboxCircle, { borderColor: C.gold }]}>
+              <Image
+                source={{ uri: space.patient_photo_url }}
+                style={styles.lightboxImage}
+                resizeMode="cover"
+              />
+            </View>
+          </TouchableOpacity>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -160,8 +163,8 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 4,
   },
-  addressRow: { marginBottom: 10 },
-  addressText: { fontFamily: "DM_Sans_400Regular", fontSize: 12 },
+  addressRow: { marginBottom: 10, alignItems: "center" },
+  addressText: { fontFamily: "DM_Sans_400Regular", fontSize: 12, textAlign: "center" },
   tabsRow: {
     flexDirection: "row",
     flexWrap: "wrap",

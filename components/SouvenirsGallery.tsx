@@ -195,7 +195,11 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
       resetUploadForm();
       await loadPhotos();
     } catch (e: any) {
-      showToast("Erreur upload : " + (e?.message ?? "inconnue"));
+      // The upload sheet is a native <Modal> rendered above the rest of the
+      // screen — it stays open on failure (so the user can retry), which
+      // means the toast banner below would be invisible. Alert is native
+      // too, so it always shows up regardless.
+      Alert.alert("Erreur lors de l'envoi", e?.message ?? "Erreur inconnue.");
     }
 
     setUploading(false);

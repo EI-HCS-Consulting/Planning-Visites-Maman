@@ -84,7 +84,6 @@ export function findNextAvailableSlot(
   slots: string[],
   startDate: Date,
 ): { date: Date; iso: string; slot: string } | null {
-  const now = new Date();
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
@@ -98,12 +97,12 @@ export function findNextAvailableSlot(
     const d = new Date(searchStart);
     d.setDate(d.getDate() + i);
     const iso = toISO(d);
-    const isToday = iso === toISO(today);
-    const currentHour = now.getHours() + now.getMinutes() / 60;
 
     for (const slot of slots) {
-      const slotH = parseInt(slot.split(":")[0]) + parseInt(slot.split(":")[1]) / 60;
-      if (isToday && slotH <= currentHour) continue;
+      // isSlotPast() is a no-op for any day other than today, so this only
+      // ever filters out today's already-gone slots — kept in sync with the
+      // exact same check used when rendering the slots list.
+      if (isSlotPast(iso, slot)) continue;
 
       const occ = getSlotOccupancy(reservations, iso, slot);
       if (occ.length < config.max_visitors_per_slot) {

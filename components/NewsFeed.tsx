@@ -211,7 +211,19 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
     setFormSaving(true);
 
     // Upload new photos
+    const newPhotosCount = formPhotos.filter((p) => !p.uri.startsWith("http")).length;
     const uploadedFilenames = await uploadNewPhotos(formPhotos);
+    const keptCount = formPhotos.filter((p) => p.uri.startsWith("http")).length;
+    const newlyUploadedCount = uploadedFilenames.length - keptCount;
+    if (newlyUploadedCount < newPhotosCount) {
+      // uploadNewPhotos() silently skips photos that fail to upload — warn
+      // instead of letting the post save with fewer photos than expected
+      // and no explanation.
+      Alert.alert(
+        "Envoi de photo incomplet",
+        `${newPhotosCount - newlyUploadedCount} photo(s) sur ${newPhotosCount} n'a/n'ont pas pu être envoyée(s). La nouvelle sera publiée avec les autres.`,
+      );
+    }
 
     if (editTarget) {
       // Edit: remove old photos that were removed from formPhotos
@@ -241,7 +253,10 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
         .eq("id", editTarget.id);
 
       setFormSaving(false);
-      if (error) { showToast("Erreur lors de la modification."); return; }
+      // The publish/edit sheet is a native <Modal> — it stays open on error
+      // (so the user can retry), which would hide the toast banner behind
+      // it. Alert is native too, so it's visible regardless.
+      if (error) { Alert.alert("Erreur", "Erreur lors de la modification : " + error.message); return; }
       showToast("Nouvelle modifiée ✓");
     } else {
       const { error } = await supabase.from("news_entries").insert({
@@ -255,7 +270,7 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
       });
 
       setFormSaving(false);
-      if (error) { showToast("Erreur lors de la publication."); return; }
+      if (error) { Alert.alert("Erreur", "Erreur lors de la publication : " + error.message); return; }
       showToast("Nouvelle publiée ✓");
     }
 
@@ -563,7 +578,7 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
                 style={[
                   styles.btnPrimary,
                   { backgroundColor: pinModal?.action === "delete" ? "#e94560" : C.accent },
-                  (pinEntry.length < 4 || pinChecking) && { opacity: 0.5 },
+                  pinEntry.length < 4 && { opacity: 0.5 },
                 ]}
               >
                 <Text style={styles.btnPrimaryText}>
