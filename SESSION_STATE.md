@@ -1,8 +1,33 @@
 # État de session — AvecToi (2026-06-16)
 
-Branche courante : `feature/expo-setup` (2 commits en avance sur `origin/feature/expo-setup`, non pushés)
+Branche courante : `feature/expo-setup` (4 commits en avance sur `origin/feature/expo-setup`, non pushés)
 
-## ✅ Fait (suite — onboarding app)
+## ✅ Fait (suite — refonte nav/branding, plan dans `~/.claude/plans/deep-hopping-cat.md`)
+
+Demande utilisateur en cours : refonte navigation (barre haut Calendrier/Créneaux/Nuits/Infos/
+Partager + barre bas Nouvelles/Souvenirs/Entraide/Soutien/Compte), branding, compte visiteur
+persistant, écran Nuits dédié, sync Nouvelles→Souvenirs, RGPD 30j, onboarding horaires.
+Livraison **par lots testés un par un sur téléphone réel (Expo Go)**.
+
+### Lot 1 — Branding + entrée + persistance visiteur : ✅ testé et validé en réel
+- Assets icon/adaptive-icon/splash remplacés par icon-512 ; icon-sans-512 copié dans assets/
+- Boutons accueil renommés (Je rends visite / Je suis Admin) + retour direct au calendrier si
+  session visiteur mémorisée (`lib/visitorSession.ts`, AsyncStorage)
+- **3 bugs pré-existants découverts et corrigés pendant ce premier test réel de bout en bout
+  du flux de réservation visiteur (jamais testé avant cette session)** :
+  1. Pas de filtre horaire sur les créneaux du jour (seule la date était vérifiée) → `lib/slotUtils.ts` `isSlotPast()`
+  2. Toasts d'erreur de la modale de réservation invisibles (rendus sous la `<Modal>` native) → remplacés par `Alert.alert`
+  3. **La table `reservations` n'avait jamais eu de colonne `space_id`** (héritage du MVP mono-patient) → toute réservation visiteur échouait silencieusement. Migration `supabase/migrations/20260616_reservations_space_id.sql` appliquée en prod par l'utilisateur.
+
+### Reste à faire (lots suivants)
+- Lot 2 — Navigation (barre haut+bas) + écran d'accueil `SpaceHeader` (logo photo patient, infos hôpital, adresse cliquable) + split Entraide/Soutien + Compte (admin/visiteur)
+- Lot 3 — Écran Nuits dédié + recentrage Créneaux (extraction `BookingModal` partagé)
+- Lot 4 — Sync Nouvelles→Souvenirs, RGPD 30j, onboarding horaires (visit_start_hour/end/duration/gap), champ `hospital_sector` ("Service de l'hôpital")
+
+Décisions validées : PIN visiteur toujours ressaisi (pas d'auto-validation) ; nouveau champ
+`hospital_sector` distinct de `hospital_service` existant.
+
+## ✅ Fait (session précédente — onboarding app)
 
 L'app ne permettait pas encore de créer un compte ni de renseigner la fiche patient (nom, photo,
 adresse, n° de chambre, règles de visite) — un admin sans espace tombait sur un message mort
