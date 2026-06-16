@@ -671,7 +671,7 @@ export default function SlotsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.backToCalendarBtn, { borderColor: C.border, marginTop: 10 }]}
+              style={[styles.backToCalendarBtn, { borderColor: C.accent, backgroundColor: `${C.accent}22`, marginTop: 10 }]}
               onPress={() => {
                 setConfirmed(null);
                 setBookingTarget(null);
@@ -679,7 +679,7 @@ export default function SlotsScreen() {
               }}
               activeOpacity={0.75}
             >
-              <Text style={[styles.btnSecondaryText, { color: C.muted }]}>← Retour au calendrier</Text>
+              <Text style={[styles.btnSecondaryText, { color: C.accent }]}>← Retour au calendrier</Text>
             </TouchableOpacity>
           </View>
         </View>
