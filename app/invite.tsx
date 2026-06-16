@@ -3,6 +3,7 @@ import { View, ActivityIndicator, Text, StyleSheet, Alert } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { themes } from "@/lib/themes";
+import { saveVisitorSession } from "@/lib/visitorSession";
 
 const C = themes.blue;
 
@@ -38,6 +39,9 @@ export default function InviteScreen() {
         router.replace("/");
         return;
       }
+
+      // Same rationale as auth/visitor-entry.tsx — see app/(visitor)/_layout.tsx.
+      await saveVisitorSession({ token, spaceId: data.id });
 
       router.replace({
         pathname: "/(visitor)/home/calendar",

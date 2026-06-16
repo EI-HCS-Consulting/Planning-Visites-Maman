@@ -6,6 +6,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { VisitorSpaceProvider, useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
 import { setupNotifications } from "@/lib/notifications";
+import { getVisitorSession } from "@/lib/visitorSession";
 
 function VisitorTabs() {
   const { space, loading } = useVisitorSpace();
@@ -161,15 +162,34 @@ const consentStyles = StyleSheet.create({
 });
 
 export default function VisitorLayout() {
-  // useGlobalSearchParams (not useLocalSearchParams): this layout is now two
-  // levels above the actual screens (Tabs > home Stack > calendar/slots/...),
-  // so the token/spaceId query params attached to e.g. "/(visitor)/home/calendar"
-  // aren't visible to a *local* params read way up here — only the global,
-  // whole-URL search params are.
-  const { token } = useGlobalSearchParams<{ token: string }>();
+  // The ?token= param attached when navigating to a deeply nested route
+  // (Tabs > home Stack > calendar/slots/...) doesn't reliably survive that
+  // navigation — neither local nor global search params see it here. Rather
+  // than depend on that, fall back to the session already persisted in
+  // lib/visitorSession.ts: every entry point (visitor-entry.tsx, invite.tsx)
+  // saves the token there *before* navigating, so it's always available by
+  // the time this layout mounts.
+  const params = useGlobalSearchParams<{ token: string }>();
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.token) {
+      setToken(params.token);
+      return;
+    }
+    getVisitorSession().then((s) => setToken(s?.token ?? ""));
+  }, [params.token]);
+
+  if (token === null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: themes.blue.bg, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator color={themes.blue.accent} size="large" />
+      </View>
+    );
+  }
 
   return (
-    <VisitorSpaceProvider token={token ?? ""}>
+    <VisitorSpaceProvider token={token}>
       <VisitorTabs />
     </VisitorSpaceProvider>
   );
