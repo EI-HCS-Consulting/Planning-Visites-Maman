@@ -7,6 +7,7 @@ import {
 import { useRouter } from "expo-router";
 import * as ExpoCalendar from "expo-calendar";
 import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
+import { linkCalendarEvent, getLinkedCalendarEvent, unlinkCalendarEvent } from "@/lib/calendarSync";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { supabase } from "@/lib/supabase";
 import { getVisitorSession, saveVisitorSession } from "@/lib/visitorSession";
@@ -24,6 +25,7 @@ import type { Theme } from "@/lib/themes";
 type BookingTarget = { slot: string; type: "Visite" | "Nuit" };
 
 interface ConfirmedBooking {
+  id: string;
   prenom: string;
   pin: string;
   iso: string;
@@ -36,6 +38,36 @@ function generatePin(): string {
   return String(Math.floor(1000 + Math.random() * 9000));
 }
 
+function eventWindow(iso: string, slot: string, type: "Visite" | "Nuit", slotDurationMinutes: number) {
+  const startDate = new Date(`${iso}T${slot}:00`);
+  let endDate: Date;
+  if (type === "Nuit") {
+    endDate = new Date(`${iso}T${slot}:00`);
+    endDate.setDate(endDate.getDate() + 1);
+    endDate.setHours(11, 0, 0, 0);
+  } else {
+    endDate = new Date(startDate.getTime() + slotDurationMinutes * 60 * 1000);
+  }
+  return { startDate, endDate };
+}
+
+async function findTargetCalendar(preferredEmail: string | null) {
+  const calendars = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
+  const modifiable = calendars.filter((c) => c.allowsModifications);
+
+  // Prefer the calendar tied to the visitor's saved email (their Google
+  // account, synced) over the device's local-only calendar — otherwise
+  // events get created locally and never show up anywhere else.
+  const email = preferredEmail?.trim().toLowerCase();
+  return (
+    (email && modifiable.find((c) => c.ownerAccount?.toLowerCase() === email)) ??
+    modifiable.find((c) => c.source && !c.source.isLocalAccount) ??
+    modifiable.find((c) => c.isPrimary) ??
+    modifiable[0] ??
+    null
+  );
+}
+
 async function addToNativeCalendar(
   space: PatientSpace,
   config: SlotConfig,
@@ -43,37 +75,17 @@ async function addToNativeCalendar(
   slot: string,
   type: "Visite" | "Nuit",
   preferredEmail: string | null,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<{ ok: true; eventId: string } | { ok: false; reason: string }> {
   try {
     const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
     if (status !== "granted") return { ok: false, reason: "Permission calendrier refusée." };
 
-    const calendars = await ExpoCalendar.getCalendarsAsync(ExpoCalendar.EntityTypes.EVENT);
-    const modifiable = calendars.filter((c) => c.allowsModifications);
-
-    // Prefer the calendar tied to the visitor's saved email (their Google
-    // account, synced) over the device's local-only calendar — otherwise
-    // events get created locally and never show up anywhere else.
-    const email = preferredEmail?.trim().toLowerCase();
-    const target =
-      (email && modifiable.find((c) => c.ownerAccount?.toLowerCase() === email)) ??
-      modifiable.find((c) => c.source && !c.source.isLocalAccount) ??
-      modifiable.find((c) => c.isPrimary) ??
-      modifiable[0];
+    const target = await findTargetCalendar(preferredEmail);
     if (!target) return { ok: false, reason: "Aucun calendrier modifiable trouvé sur l'appareil." };
 
-    const startDate = new Date(`${iso}T${slot}:00`);
-    let endDate: Date;
+    const { startDate, endDate } = eventWindow(iso, slot, type, config.slot_duration_minutes);
 
-    if (type === "Nuit") {
-      endDate = new Date(`${iso}T${slot}:00`);
-      endDate.setDate(endDate.getDate() + 1);
-      endDate.setHours(11, 0, 0, 0);
-    } else {
-      endDate = new Date(startDate.getTime() + config.slot_duration_minutes * 60 * 1000);
-    }
-
-    await ExpoCalendar.createEventAsync(target.id, {
+    const eventId = await ExpoCalendar.createEventAsync(target.id, {
       title: `Visite ${space.patient_firstname} ${space.patient_lastname}`,
       startDate,
       endDate,
@@ -82,9 +94,45 @@ async function addToNativeCalendar(
       alarms: [{ relativeOffset: -60 }],
     });
 
-    return { ok: true };
+    return { ok: true, eventId };
   } catch (e: any) {
     return { ok: false, reason: e?.message ?? "Erreur inconnue." };
+  }
+}
+
+// Met à jour la date/heure d'un événement déjà lié à une réservation (édition)
+// — ne fait rien (silencieusement) si aucun événement n'avait été créé.
+async function updateLinkedCalendarEvent(
+  reservationId: string,
+  iso: string,
+  slot: string,
+  type: "Visite" | "Nuit",
+  slotDurationMinutes: number,
+): Promise<void> {
+  try {
+    const eventId = await getLinkedCalendarEvent(reservationId);
+    if (!eventId) return;
+    const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+    if (status !== "granted") return;
+    const { startDate, endDate } = eventWindow(iso, slot, type, slotDurationMinutes);
+    await ExpoCalendar.updateEventAsync(eventId, { startDate, endDate });
+  } catch {
+    // Non-fatal — the reservation itself is already saved either way.
+  }
+}
+
+// Supprime l'événement lié à une réservation annulée, s'il existe.
+async function deleteLinkedCalendarEvent(reservationId: string): Promise<void> {
+  try {
+    const eventId = await getLinkedCalendarEvent(reservationId);
+    if (!eventId) return;
+    const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
+    if (status === "granted") {
+      await ExpoCalendar.deleteEventAsync(eventId);
+    }
+    await unlinkCalendarEvent(reservationId);
+  } catch {
+    // Non-fatal
   }
 }
 
@@ -249,6 +297,7 @@ export default function SlotsScreen() {
     const notifSlot = bookingTarget.type === "Nuit" ? "18:00" : bookingTarget.slot;
 
     setConfirmed({
+      id: newResa?.id ?? "",
       prenom: prenom.trim(),
       pin: pinValue,
       iso,
@@ -296,8 +345,9 @@ export default function SlotsScreen() {
       },
     }).catch(() => {});
 
-    // Annuler le rappel local
+    // Annuler le rappel local + l'événement calendrier s'il en existe un
     cancelVisitReminder(pinModal.id);
+    deleteLinkedCalendarEvent(pinModal.id);
 
     await updateLastActivity(space.id);
     await refreshReservations();
@@ -343,6 +393,18 @@ export default function SlotsScreen() {
       return;
     }
 
+    // Si un événement calendrier avait été créé pour cette réservation,
+    // le déplacer à la nouvelle date/heure plutôt que de le laisser périmé.
+    if (slotConfig) {
+      updateLinkedCalendarEvent(
+        editModal.id,
+        editDate,
+        editModal.type === "Nuit" ? "18:00" : (editSlot ?? editModal.creneau),
+        editModal.type,
+        slotConfig.slot_duration_minutes,
+      );
+    }
+
     await updateLastActivity(space.id);
     await refreshReservations();
     showToast("Réservation modifiée ✓");
@@ -355,6 +417,7 @@ export default function SlotsScreen() {
     const session = await getVisitorSession();
     const result = await addToNativeCalendar(space, slotConfig, confirmed.iso, confirmed.slot, confirmed.type, session?.email || null);
     if (result.ok) {
+      if (confirmed.id) await linkCalendarEvent(confirmed.id, result.eventId);
       setCalendarAdded(true);
       showToast("Créneau ajouté à votre calendrier ✓");
     } else {
