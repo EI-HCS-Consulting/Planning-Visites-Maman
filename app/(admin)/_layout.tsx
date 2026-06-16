@@ -1,12 +1,33 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { View, ActivityIndicator, Text, StyleSheet } from "react-native";
 import { Tabs, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
-import { AdminSpaceProvider } from "@/lib/SpaceContext";
+import { AdminSpaceProvider, useSpace } from "@/lib/SpaceContext";
 import { themes } from "@/lib/themes";
+import PatientOnboarding from "@/components/PatientOnboarding";
 
 const C = themes.blue;
+
+// Sits inside AdminSpaceProvider — shows the onboarding form instead of the
+// tabs until the admin has an active patient_spaces row.
+function AdminGate({ children }: { children: ReactNode }) {
+  const { loading, hasSpace } = useSpace();
+
+  if (loading) {
+    return (
+      <View style={styles.loader}>
+        <ActivityIndicator color={C.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (!hasSpace) {
+    return <PatientOnboarding />;
+  }
+
+  return <>{children}</>;
+}
 
 export default function AdminLayout() {
   const router = useRouter();
@@ -42,51 +63,53 @@ export default function AdminLayout() {
 
   return (
     <AdminSpaceProvider adminId={adminId}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarStyle: { backgroundColor: C.card, borderTopColor: C.border, borderTopWidth: 1 },
-          tabBarActiveTintColor: C.accent,
-          tabBarInactiveTintColor: C.muted,
-          tabBarLabelStyle: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11 },
-        }}
-      >
-        <Tabs.Screen
-          name="dashboard"
-          options={{
-            title: "Calendrier",
-            tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+      <AdminGate>
+        <Tabs
+          screenOptions={{
+            headerShown: false,
+            tabBarStyle: { backgroundColor: C.card, borderTopColor: C.border, borderTopWidth: 1 },
+            tabBarActiveTintColor: C.accent,
+            tabBarInactiveTintColor: C.muted,
+            tabBarLabelStyle: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11 },
           }}
-        />
-        <Tabs.Screen
-          name="news"
-          options={{
-            title: "Nouvelles",
-            tabBarIcon: ({ color, size }) => <Ionicons name="newspaper-outline" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="souvenirs"
-          options={{
-            title: "Souvenirs",
-            tabBarIcon: ({ color, size }) => <Ionicons name="images-outline" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="entraide"
-          options={{
-            title: "Entraide",
-            tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
-          }}
-        />
-        <Tabs.Screen
-          name="settings"
-          options={{
-            title: "Paramètres",
-            tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
-          }}
-        />
-      </Tabs>
+        >
+          <Tabs.Screen
+            name="dashboard"
+            options={{
+              title: "Calendrier",
+              tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
+            }}
+          />
+          <Tabs.Screen
+            name="news"
+            options={{
+              title: "Nouvelles",
+              tabBarIcon: ({ color, size }) => <Ionicons name="newspaper-outline" size={size} color={color} />,
+            }}
+          />
+          <Tabs.Screen
+            name="souvenirs"
+            options={{
+              title: "Souvenirs",
+              tabBarIcon: ({ color, size }) => <Ionicons name="images-outline" size={size} color={color} />,
+            }}
+          />
+          <Tabs.Screen
+            name="entraide"
+            options={{
+              title: "Entraide",
+              tabBarIcon: ({ color, size }) => <Ionicons name="people-outline" size={size} color={color} />,
+            }}
+          />
+          <Tabs.Screen
+            name="settings"
+            options={{
+              title: "Paramètres",
+              tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+            }}
+          />
+        </Tabs>
+      </AdminGate>
     </AdminSpaceProvider>
   );
 }

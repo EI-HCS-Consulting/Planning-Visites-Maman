@@ -19,6 +19,13 @@ yarn-error.log*
 .eas/
 google-play-service-account.json
 
+# Supabase CLI local cache
+supabase/.temp/
+
+# Local logs / scratch files
+npm-install.log
+avectoi-expo-qr.png
+
 # OS
 .DS_Store
 Thumbs.db

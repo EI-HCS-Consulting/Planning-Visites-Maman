@@ -11,6 +11,7 @@ interface SpaceContextValue {
   loading: boolean;
   hasSpace: boolean;
   refreshReservations: () => Promise<void>;
+  refreshSpace: () => Promise<void>;
 }
 
 const SpaceContext = createContext<SpaceContextValue>({
@@ -21,6 +22,7 @@ const SpaceContext = createContext<SpaceContextValue>({
   loading: true,
   hasSpace: false,
   refreshReservations: async () => {},
+  refreshSpace: async () => {},
 });
 
 export function useSpace() {
@@ -34,39 +36,46 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function fetchSpace() {
-      const { data: spaceData } = await supabase
-        .from("patient_spaces")
-        .select("*")
-        .eq("admin_id", adminId)
-        .eq("is_active", true)
-        .limit(1)
-        .single();
+  const fetchSpace = useCallback(async () => {
+    const { data: spaceData } = await supabase
+      .from("patient_spaces")
+      .select("*")
+      .eq("admin_id", adminId)
+      .eq("is_active", true)
+      .limit(1)
+      .single();
 
-      if (!spaceData) {
-        setLoading(false);
-        return;
-      }
-
-      setSpace(spaceData);
-
-      const { data: configData } = await supabase
-        .from("slot_config")
-        .select("*")
-        .eq("space_id", spaceData.id)
-        .single();
-
-      if (configData) {
-        setSlotConfig(configData);
-        setSlots(generateSlots(configData));
-      }
-
+    if (!spaceData) {
       setLoading(false);
+      return;
     }
 
-    fetchSpace();
+    setSpace(spaceData);
+
+    const { data: configData } = await supabase
+      .from("slot_config")
+      .select("*")
+      .eq("space_id", spaceData.id)
+      .single();
+
+    if (configData) {
+      setSlotConfig(configData);
+      setSlots(generateSlots(configData));
+    }
+
+    setLoading(false);
   }, [adminId]);
+
+  useEffect(() => {
+    fetchSpace();
+  }, [fetchSpace]);
+
+  // Exposed so the onboarding form can pull in the freshly created space
+  // without waiting for the next Realtime tick.
+  const refreshSpace = useCallback(async () => {
+    setLoading(true);
+    await fetchSpace();
+  }, [fetchSpace]);
 
   const refreshReservations = useCallback(async () => {
     if (!space) return;
@@ -110,7 +119,7 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
 
   return (
     <SpaceContext.Provider
-      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, refreshReservations }}
+      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, refreshReservations, refreshSpace }}
     >
       {children}
     </SpaceContext.Provider>

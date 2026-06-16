@@ -9,25 +9,50 @@ import { themes } from "@/lib/themes";
 
 const C = themes.blue;
 
-export default function LoginScreen() {
+export default function SignupScreen() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
 
-  async function handleLogin() {
-    if (!email.trim() || !password.trim()) return;
+  const canSubmit = email.trim() && password && confirm && !loading;
+
+  async function handleSignup() {
+    if (!canSubmit) return;
+
+    if (password.length < 6) {
+      Alert.alert("Mot de passe trop court", "Utilise au moins 6 caractères.");
+      return;
+    }
+    if (password !== confirm) {
+      Alert.alert("Les mots de passe ne correspondent pas", "Vérifie la confirmation.");
+      return;
+    }
+
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
-      password: password.trim(),
+      password,
     });
     setLoading(false);
 
     if (error) {
-      Alert.alert("Connexion impossible", error.message);
-    } else {
+      Alert.alert("Inscription impossible", error.message);
+      return;
+    }
+
+    if (data.session) {
+      // Email confirmation disabled on this project — straight into onboarding.
       router.replace("/(admin)/dashboard");
+    } else {
+      // Email confirmation required — the admin tabs will pick up onboarding
+      // automatically once they log back in with a confirmed account.
+      Alert.alert(
+        "Compte créé ✓",
+        "Vérifie ta boîte mail pour confirmer ton adresse, puis connecte-toi.",
+        [{ text: "OK", onPress: () => router.replace("/auth/login") }],
+      );
     }
   }
 
@@ -41,13 +66,10 @@ export default function LoginScreen() {
           <Text style={styles.backText}>← Retour</Text>
         </TouchableOpacity>
 
-        <Text style={styles.title}>Connexion admin</Text>
+        <Text style={styles.title}>Créer un compte</Text>
         <Text style={styles.subtitle}>
-          Gérez votre espace patient depuis l'app.{"\n"}
-          Pas encore de compte ?{" "}
-          <Text style={{ color: C.accent }} onPress={() => router.push("/auth/signup")}>
-            Créez-en un
-          </Text>
+          Gratuit, sans carte bancaire.{"\n"}
+          Tu pourras planifier jusqu'à 5 visites avant de passer en illimité.
         </Text>
 
         <View style={styles.form}>
@@ -63,26 +85,37 @@ export default function LoginScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Mot de passe"
+            placeholder="Mot de passe (6 caractères min.)"
             placeholderTextColor={C.muted}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
           />
+          <TextInput
+            style={styles.input}
+            placeholder="Confirmer le mot de passe"
+            placeholderTextColor={C.muted}
+            value={confirm}
+            onChangeText={setConfirm}
+            secureTextEntry
+          />
           <TouchableOpacity
-            style={[styles.btn, (!email || !password || loading) && styles.btnDisabled]}
-            onPress={handleLogin}
-            disabled={!email || !password || loading}
+            style={[styles.btn, !canSubmit && styles.btnDisabled]}
+            onPress={handleSignup}
+            disabled={!canSubmit}
             activeOpacity={0.85}
           >
             <Text style={styles.btnText}>
-              {loading ? "Connexion…" : "Se connecter"}
+              {loading ? "Création…" : "Créer mon compte"}
             </Text>
           </TouchableOpacity>
         </View>
 
         <Text style={styles.hint}>
-          L'application ne vend rien — aucun achat in-app.
+          Déjà un compte ?{" "}
+          <Text style={{ color: C.accent }} onPress={() => router.replace("/auth/login")}>
+            Se connecter
+          </Text>
         </Text>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -137,7 +170,7 @@ const styles = StyleSheet.create({
   },
   hint: {
     fontFamily: "DM_Sans_400Regular",
-    fontSize: 12,
+    fontSize: 13,
     color: C.muted,
     textAlign: "center",
     marginTop: 32,
