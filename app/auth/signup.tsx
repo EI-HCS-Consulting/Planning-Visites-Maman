@@ -44,7 +44,7 @@ export default function SignupScreen() {
 
     if (data.session) {
       // Email confirmation disabled on this project — straight into onboarding.
-      router.replace("/(admin)/dashboard");
+      router.replace("/(admin)/home/calendar");
     } else {
       // Email confirmation required — the admin tabs will pick up onboarding
       // automatically once they log back in with a confirmed account.

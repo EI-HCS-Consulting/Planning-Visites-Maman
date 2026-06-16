@@ -8,6 +8,7 @@ export interface PatientSpace {
   patient_photo_url: string | null;
   hospital_name: string;
   hospital_service: string;
+  hospital_sector: string | null;
   hospital_room: string;
   hospital_address: string;
   hospital_maps_url: string;

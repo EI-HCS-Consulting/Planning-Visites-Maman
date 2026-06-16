@@ -10,6 +10,7 @@ import { useVisitorSpace } from "@/lib/VisitorContext";
 import { supabase } from "@/lib/supabase";
 import { saveVisitorSession } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
+import SpaceHeader from "@/components/SpaceHeader";
 import {
   getSlotOccupancy, getNightReservation, getDaysInMonth, isSlotPast,
   toISO, toFrLong, toFrShort, addDays,
@@ -332,12 +333,7 @@ export default function SlotsScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
-      {/* Header */}
-      <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-        <Text style={[styles.headerTitle, { color: "#fff" }]}>
-          {space.patient_firstname} {space.patient_lastname}
-        </Text>
-      </View>
+      <SpaceHeader space={space} active="slots" basePath="/(visitor)/home" C={C} />
 
       <ScrollView contentContainerStyle={styles.scroll}>
         {/* Day navigation */}

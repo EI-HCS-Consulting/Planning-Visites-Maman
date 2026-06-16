@@ -43,7 +43,7 @@ export default function VisitorEntryScreen() {
     await saveVisitorSession({ token: t, spaceId: data.id });
 
     router.replace({
-      pathname: "/(visitor)/calendar",
+      pathname: "/(visitor)/home/calendar",
       params: { spaceId: data.id, token: t },
     });
   }

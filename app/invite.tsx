@@ -40,7 +40,7 @@ export default function InviteScreen() {
       }
 
       router.replace({
-        pathname: "/(visitor)/calendar",
+        pathname: "/(visitor)/home/calendar",
         params: { spaceId: data.id, token },
       });
     }

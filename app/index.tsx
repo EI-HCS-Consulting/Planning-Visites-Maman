@@ -14,7 +14,7 @@ export default function WelcomeScreen() {
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
-        router.replace("/(admin)/dashboard");
+        router.replace("/(admin)/home/calendar");
         return;
       }
 
@@ -24,7 +24,7 @@ export default function WelcomeScreen() {
       const visitor = await getVisitorSession();
       if (visitor) {
         router.replace({
-          pathname: "/(visitor)/calendar",
+          pathname: "/(visitor)/home/calendar",
           params: { spaceId: visitor.spaceId, token: visitor.token },
         });
         return;

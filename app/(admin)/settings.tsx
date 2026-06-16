@@ -236,6 +236,9 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Text style={[styles.backBtnText, { color: C.muted }]}>← Compte</Text>
+        </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: "#fff" }]}>⚙️ Paramètres</Text>
       </View>
 
@@ -499,6 +502,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 52, paddingBottom: 14,
     borderBottomWidth: 1,
   },
+  backBtn: { marginBottom: 8 },
+  backBtnText: { fontFamily: "DM_Sans_400Regular", fontSize: 14 },
   headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 20 },
 
   scroll: { padding: 16, paddingBottom: 48 },

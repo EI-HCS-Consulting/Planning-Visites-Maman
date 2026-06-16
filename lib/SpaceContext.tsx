@@ -10,6 +10,8 @@ interface SpaceContextValue {
   reservations: Reservation[];
   loading: boolean;
   hasSpace: boolean;
+  selectedDay: Date;
+  setSelectedDay: (day: Date) => void;
   refreshReservations: () => Promise<void>;
   refreshSpace: () => Promise<void>;
 }
@@ -21,6 +23,8 @@ const SpaceContext = createContext<SpaceContextValue>({
   reservations: [],
   loading: true,
   hasSpace: false,
+  selectedDay: new Date(),
+  setSelectedDay: () => {},
   refreshReservations: async () => {},
   refreshSpace: async () => {},
 });
@@ -35,6 +39,11 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
   const [slots, setSlots] = useState<string[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedDay, setSelectedDay] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
 
   const fetchSpace = useCallback(async () => {
     const { data: spaceData } = await supabase
@@ -51,6 +60,9 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
     }
 
     setSpace(spaceData);
+
+    const startDate = new Date(spaceData.start_date + "T00:00:00");
+    setSelectedDay((prev) => (prev < startDate ? startDate : prev));
 
     const { data: configData } = await supabase
       .from("slot_config")
@@ -119,7 +131,7 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
 
   return (
     <SpaceContext.Provider
-      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, refreshReservations, refreshSpace }}
+      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, selectedDay, setSelectedDay, refreshReservations, refreshSpace }}
     >
       {children}
     </SpaceContext.Provider>

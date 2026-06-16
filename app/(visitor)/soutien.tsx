@@ -1,9 +1,9 @@
 import { View, ActivityIndicator } from "react-native";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
-import Entraide from "@/components/Entraide";
+import Soutien from "@/components/Soutien";
 
-export default function VisitorEntraideScreen() {
+export default function VisitorSoutienScreen() {
   const { space } = useVisitorSpace();
   const C = themes[space?.theme ?? "blue"];
 
@@ -15,5 +15,5 @@ export default function VisitorEntraideScreen() {
     );
   }
 
-  return <Entraide spaceId={space.id} C={C} isAdmin={false} />;
+  return <Soutien spaceId={space.id} C={C} isAdmin={false} />;
 }

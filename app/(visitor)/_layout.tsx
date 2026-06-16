@@ -74,18 +74,8 @@ function VisitorTabs() {
       }}
     >
       <Tabs.Screen
-        name="calendar"
-        options={{
-          title: "Calendrier",
-          tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="slots"
-        options={{
-          title: "Créneaux",
-          tabBarIcon: ({ color, size }) => <Ionicons name="time-outline" size={size} color={color} />,
-        }}
+        name="home"
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="news"
@@ -109,10 +99,17 @@ function VisitorTabs() {
         }}
       />
       <Tabs.Screen
-        name="info"
+        name="soutien"
         options={{
-          title: "Infos",
-          tabBarIcon: ({ color, size }) => <Ionicons name="information-circle-outline" size={size} color={color} />,
+          title: "Soutien",
+          tabBarIcon: ({ color, size }) => <Ionicons name="heart-outline" size={size} color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="account"
+        options={{
+          title: "Compte",
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" size={size} color={color} />,
         }}
       />
     </Tabs>

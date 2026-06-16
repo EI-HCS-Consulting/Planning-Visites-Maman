@@ -74,11 +74,8 @@ export default function AdminLayout() {
           }}
         >
           <Tabs.Screen
-            name="dashboard"
-            options={{
-              title: "Calendrier",
-              tabBarIcon: ({ color, size }) => <Ionicons name="calendar-outline" size={size} color={color} />,
-            }}
+            name="home"
+            options={{ href: null }}
           />
           <Tabs.Screen
             name="news"
@@ -102,11 +99,22 @@ export default function AdminLayout() {
             }}
           />
           <Tabs.Screen
-            name="settings"
+            name="soutien"
             options={{
-              title: "Paramètres",
-              tabBarIcon: ({ color, size }) => <Ionicons name="settings-outline" size={size} color={color} />,
+              title: "Soutien",
+              tabBarIcon: ({ color, size }) => <Ionicons name="heart-outline" size={size} color={color} />,
             }}
+          />
+          <Tabs.Screen
+            name="account"
+            options={{
+              title: "Compte",
+              tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" size={size} color={color} />,
+            }}
+          />
+          <Tabs.Screen
+            name="settings"
+            options={{ href: null }}
           />
         </Tabs>
       </AdminGate>

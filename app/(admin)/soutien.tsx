@@ -1,9 +1,9 @@
 import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
 import { useSpace } from "@/lib/SpaceContext";
 import { themes } from "@/lib/themes";
-import Entraide from "@/components/Entraide";
+import Soutien from "@/components/Soutien";
 
-export default function AdminEntraideScreen() {
+export default function AdminSoutienScreen() {
   const { space, loading, hasSpace } = useSpace();
   const C = themes[space?.theme ?? "blue"];
 
@@ -23,7 +23,7 @@ export default function AdminEntraideScreen() {
     );
   }
 
-  return <Entraide spaceId={space.id} C={C} isAdmin={true} />;
+  return <Soutien spaceId={space.id} C={C} isAdmin={true} />;
 }
 
 const styles = StyleSheet.create({

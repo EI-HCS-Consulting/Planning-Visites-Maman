@@ -1,16 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  FlatList, Modal, StyleSheet, Alert, ActivityIndicator,
+  Modal, StyleSheet, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform,
 } from "react-native";
 import { supabase } from "@/lib/supabase";
 import PinPad from "@/components/PinPad";
-import type { Task, SupportMessage } from "@/lib/types";
+import type { Task } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
 
-// ─── Constantes ───────────────────────────────────────────────────────────────
-type Section = "entraide" | "soutien";
+// Section "Besoins" extraite de l'ancien EntraideSoutien.tsx (qui combinait
+// Besoins + Mur de soutien sous un toggle interne) — voir components/Soutien.tsx
+// pour l'autre moitié. Même logique, juste sans le toggle de section.
+
 type TaskStatus = Task["status"];
 type TaskCategory = Task["category"];
 
@@ -40,26 +42,16 @@ const STATUS_COLORS = (C: Theme): Record<TaskStatus, string> => ({
   fait: C.muted,
 });
 
-// ─── Props ────────────────────────────────────────────────────────────────────
 interface Props {
   spaceId: string;
   C: Theme;
   isAdmin: boolean;
 }
 
-// ─── Composant principal ──────────────────────────────────────────────────────
-export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
-  const [section, setSection] = useState<Section>("entraide");
-
-  // Tasks
+export default function Entraide({ spaceId, C, isAdmin }: Props) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
 
-  // Support messages
-  const [messages, setMessages] = useState<SupportMessage[]>([]);
-  const [msgsLoading, setMsgsLoading] = useState(true);
-
-  // Task form (create / edit)
   const [taskForm, setTaskForm] = useState(false);
   const [editTask, setEditTask] = useState<Task | null>(null);
   const [fTitle, setFTitle] = useState("");
@@ -67,23 +59,15 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
   const [fCat, setFCat] = useState<TaskCategory>("autre");
   const [taskSaving, setTaskSaving] = useState(false);
 
-  // Claim modal
   const [claimTarget, setClaimTarget] = useState<Task | null>(null);
   const [claimPrenom, setClaimPrenom] = useState("");
   const [claimNom, setClaimNom] = useState("");
   const [claimPin, setClaimPin] = useState("");
   const [claimSaving, setClaimSaving] = useState(false);
 
-  // Unclaim / done PIN modal
   const [pinModal, setPinModal] = useState<{ task: Task; action: "unclaim" | "done" } | null>(null);
   const [pinEntry, setPinEntry] = useState("");
   const [pinError, setPinError] = useState(false);
-
-  // Support message form
-  const [msgText, setMsgText] = useState("");
-  const [msgPrenom, setMsgPrenom] = useState("");
-  const [msgNom, setMsgNom] = useState("");
-  const [msgSaving, setMsgSaving] = useState(false);
 
   const [toast, setToast] = useState("");
   function showToast(msg: string) {
@@ -91,7 +75,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     setTimeout(() => setToast(""), 3000);
   }
 
-  // ── Load tasks ─────────────────────────────────────────────────────────────
   const loadTasks = useCallback(async () => {
     setTasksLoading(true);
     const { data } = await supabase
@@ -103,37 +86,16 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     setTasksLoading(false);
   }, [spaceId]);
 
-  // ── Load messages ──────────────────────────────────────────────────────────
-  const loadMessages = useCallback(async () => {
-    setMsgsLoading(true);
-    const { data } = await supabase
-      .from("support_messages")
-      .select("*")
-      .eq("space_id", spaceId)
-      .order("created_at", { ascending: false });
-    setMessages(data || []);
-    setMsgsLoading(false);
-  }, [spaceId]);
+  useEffect(() => { loadTasks(); }, [loadTasks]);
 
   useEffect(() => {
-    loadTasks();
-    loadMessages();
-  }, [loadTasks, loadMessages]);
-
-  // Realtime
-  useEffect(() => {
-    const ch1 = supabase
+    const ch = supabase
       .channel(`tasks:${spaceId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `space_id=eq.${spaceId}` }, loadTasks)
       .subscribe();
-    const ch2 = supabase
-      .channel(`support:${spaceId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "support_messages", filter: `space_id=eq.${spaceId}` }, loadMessages)
-      .subscribe();
-    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
-  }, [spaceId, loadTasks, loadMessages]);
+    return () => { supabase.removeChannel(ch); };
+  }, [spaceId, loadTasks]);
 
-  // ── Task form helpers ──────────────────────────────────────────────────────
   function openCreateTask() {
     setEditTask(null);
     setFTitle(""); setFDesc(""); setFCat("autre");
@@ -186,7 +148,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     loadTasks();
   }
 
-  // ── Claim ──────────────────────────────────────────────────────────────────
   function openClaim(t: Task) {
     setClaimTarget(t);
     setClaimPrenom(""); setClaimNom(""); setClaimPin("");
@@ -207,7 +168,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     loadTasks();
   }
 
-  // ── Pin modal (unclaim / done) ─────────────────────────────────────────────
   function openPinModal(task: Task, action: "unclaim" | "done") {
     setPinModal({ task, action });
     setPinEntry(""); setPinError(false);
@@ -237,41 +197,10 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     }
   }
 
-  // ── Support message ────────────────────────────────────────────────────────
-  async function postMessage() {
-    if (!msgText.trim() || !msgPrenom.trim() || !msgNom.trim()) return;
-    setMsgSaving(true);
-    await supabase.from("support_messages").insert({
-      space_id: spaceId,
-      message: msgText.trim(),
-      author_prenom: msgPrenom.trim(),
-      author_nom: msgNom.trim(),
-    });
-    setMsgSaving(false);
-    setMsgText(""); setMsgPrenom(""); setMsgNom("");
-    showToast("Message posté ✓");
-    loadMessages();
-  }
-
-  async function deleteMessage(m: SupportMessage) {
-    Alert.alert("Supprimer ce message ?", `"${m.message.slice(0, 60)}…"`, [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Supprimer", style: "destructive", onPress: async () => {
-          await supabase.from("support_messages").delete().eq("id", m.id);
-          loadMessages();
-          showToast("Message supprimé");
-        },
-      },
-    ]);
-  }
-
-  // ── Task card render ───────────────────────────────────────────────────────
   function renderTask(t: Task) {
     const statusColors = STATUS_COLORS(C);
     return (
       <View key={t.id} style={[styles.taskCard, { backgroundColor: C.card, borderColor: t.status === "fait" ? "rgba(122,143,166,0.2)" : C.border }]}>
-        {/* Header */}
         <View style={styles.taskHeader}>
           <View style={[styles.catBadge, { backgroundColor: `${C.accent}22` }]}>
             <Text style={styles.catIcon}>{CATEGORY_ICONS[t.category]}</Text>
@@ -297,7 +226,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
           <Text style={[styles.taskDesc, { color: C.muted }]}>{t.description}</Text>
         ) : null}
 
-        {/* Claimer info */}
         {t.status !== "ouvert" && t.claimed_by_prenom && (
           <View style={[styles.claimerRow, { borderColor: C.border, backgroundColor: `${C.accent}11` }]}>
             <Text style={[styles.claimerText, { color: C.text }]}>
@@ -306,7 +234,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
           </View>
         )}
 
-        {/* Actions */}
         {t.status === "ouvert" && (
           <TouchableOpacity
             style={[styles.claimBtn, { backgroundColor: C.accent }]}
@@ -355,145 +282,35 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
     );
   }
 
-  // ─── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
-      {/* Header */}
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-        <Text style={[styles.headerTitle, { color: "#fff" }]}>🤝 Entraide & Soutien</Text>
+        <Text style={[styles.headerTitle, { color: "#fff" }]}>🤝 Entraide</Text>
       </View>
 
-      {/* Section tabs */}
-      <View style={[styles.tabs, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+      <View style={[styles.sectionBar, { borderBottomColor: C.border }]}>
+        <Text style={[styles.sectionCount, { color: C.muted }]}>
+          {tasks.filter((t) => t.status !== "fait").length} besoin{tasks.filter((t) => t.status !== "fait").length !== 1 ? "s" : ""} ouvert{tasks.filter((t) => t.status !== "fait").length !== 1 ? "s" : ""}
+        </Text>
         <TouchableOpacity
-          style={[styles.tab, section === "entraide" && { borderBottomColor: C.accent, borderBottomWidth: 2 }]}
-          onPress={() => setSection("entraide")}
+          style={[styles.createBtn, { backgroundColor: C.accent }]}
+          onPress={openCreateTask}
         >
-          <Text style={[styles.tabText, { color: section === "entraide" ? C.accent : C.muted }]}>Besoins</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.tab, section === "soutien" && { borderBottomColor: C.accent, borderBottomWidth: 2 }]}
-          onPress={() => setSection("soutien")}
-        >
-          <Text style={[styles.tabText, { color: section === "soutien" ? C.accent : C.muted }]}>Mur de soutien 💛</Text>
+          <Text style={styles.createBtnText}>+ Besoin</Text>
         </TouchableOpacity>
       </View>
 
-      {/* ── SECTION ENTRAIDE ──────────────────────────────────────────────── */}
-      {section === "entraide" && (
-        <>
-          <View style={[styles.sectionBar, { borderBottomColor: C.border }]}>
-            <Text style={[styles.sectionCount, { color: C.muted }]}>
-              {tasks.filter((t) => t.status !== "fait").length} besoin{tasks.filter((t) => t.status !== "fait").length !== 1 ? "s" : ""} ouvert{tasks.filter((t) => t.status !== "fait").length !== 1 ? "s" : ""}
-            </Text>
-            <TouchableOpacity
-              style={[styles.createBtn, { backgroundColor: C.accent }]}
-              onPress={openCreateTask}
-            >
-              <Text style={styles.createBtnText}>+ Besoin</Text>
-            </TouchableOpacity>
-          </View>
-
-          {tasksLoading ? (
-            <View style={styles.centered}><ActivityIndicator color={C.accent} size="large" /></View>
-          ) : tasks.length === 0 ? (
-            <View style={styles.centered}>
-              <Text style={{ fontSize: 36, marginBottom: 12 }}>🤝</Text>
-              <Text style={[styles.emptyText, { color: C.muted }]}>Aucun besoin pour l'instant.</Text>
-              <Text style={[styles.emptyHint, { color: C.muted }]}>Crée un besoin si tu as besoin d'aide.</Text>
-            </View>
-          ) : (
-            <ScrollView contentContainerStyle={styles.listPad}>
-              {tasks.map(renderTask)}
-            </ScrollView>
-          )}
-        </>
-      )}
-
-      {/* ── SECTION MUR DE SOUTIEN ────────────────────────────────────────── */}
-      {section === "soutien" && (
-        <ScrollView contentContainerStyle={styles.listPad} keyboardShouldPersistTaps="handled">
-          {/* Formulaire post */}
-          <View style={[styles.msgForm, { backgroundColor: C.card, borderColor: C.border }]}>
-            <Text style={[styles.msgFormTitle, { color: C.gold }]}>💛 Laisser un message de soutien</Text>
-            <TextInput
-              style={[styles.input, styles.msgArea, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-              placeholder="Un mot d'encouragement pour la famille et le patient…"
-              placeholderTextColor={C.muted}
-              value={msgText}
-              onChangeText={setMsgText}
-              multiline
-              numberOfLines={3}
-              textAlignVertical="top"
-            />
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              <TextInput
-                style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Prénom *"
-                placeholderTextColor={C.muted}
-                value={msgPrenom}
-                onChangeText={setMsgPrenom}
-                autoCapitalize="words"
-              />
-              <TextInput
-                style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Nom *"
-                placeholderTextColor={C.muted}
-                value={msgNom}
-                onChangeText={setMsgNom}
-                autoCapitalize="words"
-              />
-            </View>
-            <TouchableOpacity
-              style={[
-                styles.postBtn,
-                { backgroundColor: C.gold },
-                (!msgText.trim() || !msgPrenom.trim() || !msgNom.trim() || msgSaving) && { opacity: 0.5 },
-              ]}
-              onPress={postMessage}
-              disabled={!msgText.trim() || !msgPrenom.trim() || !msgNom.trim() || msgSaving}
-            >
-              {msgSaving
-                ? <ActivityIndicator color="#0D1B2E" size="small" />
-                : <Text style={styles.postBtnText}>Envoyer 💛</Text>
-              }
-            </TouchableOpacity>
-          </View>
-
-          {/* Messages */}
-          {msgsLoading ? (
-            <ActivityIndicator color={C.accent} style={{ marginTop: 24 }} />
-          ) : messages.length === 0 ? (
-            <View style={[styles.centered, { marginTop: 32 }]}>
-              <Text style={{ fontSize: 32, marginBottom: 10 }}>💛</Text>
-              <Text style={[styles.emptyText, { color: C.muted }]}>Aucun message de soutien.</Text>
-              <Text style={[styles.emptyHint, { color: C.muted }]}>Sois le premier à en laisser un !</Text>
-            </View>
-          ) : (
-            messages.map((m) => (
-              <View key={m.id} style={[styles.msgCard, { backgroundColor: C.card, borderColor: C.border }]}>
-                <View style={styles.msgCardHeader}>
-                  <View style={[styles.msgAvatar, { backgroundColor: `${C.gold}33` }]}>
-                    <Text style={[styles.msgAvatarText, { color: C.gold }]}>
-                      {m.author_prenom.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.msgAuthor, { color: "#fff" }]}>{m.author_prenom} {m.author_nom}</Text>
-                    <Text style={[styles.msgDate, { color: C.muted }]}>
-                      {new Date(m.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}
-                    </Text>
-                  </View>
-                  {isAdmin && (
-                    <TouchableOpacity onPress={() => deleteMessage(m)} style={[styles.iconBtn, { borderColor: "rgba(233,69,96,0.3)" }]}>
-                      <Text style={{ fontSize: 13, color: "#e94560" }}>🗑️</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <Text style={[styles.msgText, { color: C.text }]}>{m.message}</Text>
-              </View>
-            ))
-          )}
+      {tasksLoading ? (
+        <View style={styles.centered}><ActivityIndicator color={C.accent} size="large" /></View>
+      ) : tasks.length === 0 ? (
+        <View style={styles.centered}>
+          <Text style={{ fontSize: 36, marginBottom: 12 }}>🤝</Text>
+          <Text style={[styles.emptyText, { color: C.muted }]}>Aucun besoin pour l'instant.</Text>
+          <Text style={[styles.emptyHint, { color: C.muted }]}>Crée un besoin si tu as besoin d'aide.</Text>
+        </View>
+      ) : (
+        <ScrollView contentContainerStyle={styles.listPad}>
+          {tasks.map(renderTask)}
         </ScrollView>
       )}
 
@@ -526,7 +343,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
                     textAlignVertical="top"
                   />
 
-                  {/* Category picker */}
                   <Text style={[styles.fieldLabel, { color: C.gold }]}>Catégorie</Text>
                   <View style={styles.catGrid}>
                     {(Object.keys(CATEGORY_ICONS) as TaskCategory[]).map((cat) => (
@@ -707,7 +523,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
         </View>
       </Modal>
 
-      {/* Toast */}
       {!!toast && (
         <View style={[styles.toast, { backgroundColor: C.success }]}>
           <Text style={styles.toastText}>{toast}</Text>
@@ -717,7 +532,6 @@ export default function EntraideSoutien({ spaceId, C, isAdmin }: Props) {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   container: { flex: 1 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 32 },
@@ -727,10 +541,6 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 52, paddingBottom: 12, borderBottomWidth: 1 },
   headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18 },
 
-  tabs: { flexDirection: "row", borderBottomWidth: 1 },
-  tab: { flex: 1, paddingVertical: 12, alignItems: "center" },
-  tabText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
-
   sectionBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1 },
   sectionCount: { fontFamily: "DM_Sans_400Regular", fontSize: 12 },
   createBtn: { borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
@@ -738,7 +548,6 @@ const styles = StyleSheet.create({
 
   listPad: { padding: 14, paddingBottom: 40 },
 
-  // Task card
   taskCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
   taskHeader: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" },
   catBadge: { flexDirection: "row", alignItems: "center", gap: 5, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20 },
@@ -756,21 +565,6 @@ const styles = StyleSheet.create({
   actionSmall: { borderWidth: 1, borderRadius: 8, paddingVertical: 7, paddingHorizontal: 14 },
   actionSmallText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
 
-  // Support message
-  msgForm: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 14 },
-  msgFormTitle: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 10 },
-  msgArea: { height: 80, textAlignVertical: "top" },
-  postBtn: { borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 4 },
-  postBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#0D1B2E" },
-  msgCard: { borderWidth: 1, borderRadius: 14, padding: 14, marginBottom: 10 },
-  msgCardHeader: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 8 },
-  msgAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: "center", justifyContent: "center" },
-  msgAvatarText: { fontFamily: "DM_Sans_700Bold", fontSize: 15 },
-  msgAuthor: { fontFamily: "DM_Sans_700Bold", fontSize: 13 },
-  msgDate: { fontFamily: "DM_Sans_400Regular", fontSize: 11, marginTop: 1 },
-  msgText: { fontFamily: "DM_Sans_400Regular", fontSize: 14, lineHeight: 22 },
-
-  // Form
   input: { borderWidth: 1, borderRadius: 10, padding: 12, fontFamily: "DM_Sans_400Regular", fontSize: 15, marginBottom: 10 },
   descArea: { height: 80, textAlignVertical: "top" },
   fieldLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 },
@@ -779,13 +573,11 @@ const styles = StyleSheet.create({
   catOptionIcon: { fontSize: 16 },
   catOptionLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
 
-  // PIN context
   pinContext: { borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 16 },
   pinContextText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
   pinContextSub: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginTop: 4 },
   pinErrorText: { fontFamily: "DM_Sans_400Regular", fontSize: 12, textAlign: "center", marginTop: 8 },
 
-  // Overlay / sheet
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "flex-end" },
   overlayScroll: { flexGrow: 1, justifyContent: "flex-end" },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderLeftWidth: 1, borderRightWidth: 1, padding: 20, paddingBottom: 40 },
