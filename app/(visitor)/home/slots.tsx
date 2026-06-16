@@ -4,6 +4,7 @@ import {
   Modal, StyleSheet, Alert, ActivityIndicator, KeyboardAvoidingView,
   Platform,
 } from "react-native";
+import { useRouter } from "expo-router";
 import * as ExpoCalendar from "expo-calendar";
 import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
 import { useVisitorSpace } from "@/lib/VisitorContext";
@@ -85,6 +86,7 @@ async function updateLastActivity(spaceId: string) {
 
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SlotsScreen() {
+  const router = useRouter();
   const ctx = useVisitorSpace();
   const {
     space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token,
@@ -574,7 +576,8 @@ export default function SlotsScreen() {
                 {confirmed?.pin}
               </Text>
               <Text style={[styles.pinDisplayHint, { color: C.muted }]}>
-                Note ce code — tu en auras besoin pour modifier ou annuler ta réservation.
+                Note ce code ou enregistre-le dans ton compte utilisateur (onglet Compte) — tu en
+                auras besoin pour modifier ou annuler ta réservation.
               </Text>
             </View>
 
@@ -594,9 +597,13 @@ export default function SlotsScreen() {
 
             <TouchableOpacity
               style={[styles.btnSecondary, { borderColor: C.border, marginTop: 10 }]}
-              onPress={() => { setConfirmed(null); setBookingTarget(null); }}
+              onPress={() => {
+                setConfirmed(null);
+                setBookingTarget(null);
+                router.navigate("/(visitor)/home/calendar");
+              }}
             >
-              <Text style={[styles.btnSecondaryText, { color: C.muted }]}>Fermer</Text>
+              <Text style={[styles.btnSecondaryText, { color: C.muted }]}>← Retour au calendrier</Text>
             </TouchableOpacity>
           </View>
         </View>
