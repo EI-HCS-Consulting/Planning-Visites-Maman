@@ -671,12 +671,13 @@ export default function SlotsScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.btnSecondary, { borderColor: C.border, marginTop: 10 }]}
+              style={[styles.backToCalendarBtn, { borderColor: C.border, marginTop: 10 }]}
               onPress={() => {
                 setConfirmed(null);
                 setBookingTarget(null);
                 router.navigate("/(visitor)/home/calendar");
               }}
+              activeOpacity={0.75}
             >
               <Text style={[styles.btnSecondaryText, { color: C.muted }]}>← Retour au calendrier</Text>
             </TouchableOpacity>
@@ -1035,6 +1036,9 @@ const styles = StyleSheet.create({
   btnPrimaryText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
   btnSecondary: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 14, alignItems: "center" },
   btnSecondaryText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
+  // Bouton seul (pas en paire côte à côte) — btnSecondary utilise flex:1, qui
+  // n'a de sens que dans une rangée ; ici ça cassait le rendu hors contexte.
+  backToCalendarBtn: { width: "100%", borderWidth: 1, borderRadius: 10, paddingVertical: 14, alignItems: "center" },
 
   pinDisplay: { borderWidth: 1, borderRadius: 12, padding: 16, marginBottom: 14, alignItems: "center" },
   pinDisplayLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 8 },
