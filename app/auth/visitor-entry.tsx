@@ -6,6 +6,7 @@ import {
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { themes } from "@/lib/themes";
+import { saveVisitorSession } from "@/lib/visitorSession";
 
 const C = themes.blue;
 
@@ -36,6 +37,10 @@ export default function VisitorEntryScreen() {
       Alert.alert("Espace inactif", "Cet espace n'est pas encore actif.");
       return;
     }
+
+    // Remember this space on the device — reopening the app will skip
+    // straight to the calendar (see app/index.tsx).
+    await saveVisitorSession({ token: t, spaceId: data.id });
 
     router.replace({
       pathname: "/(visitor)/calendar",

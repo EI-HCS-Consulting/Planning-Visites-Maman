@@ -8,9 +8,10 @@ import * as ExpoCalendar from "expo-calendar";
 import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { supabase } from "@/lib/supabase";
+import { saveVisitorSession } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
 import {
-  getSlotOccupancy, getNightReservation, getDaysInMonth,
+  getSlotOccupancy, getNightReservation, getDaysInMonth, isSlotPast,
   toISO, toFrLong, toFrShort, addDays,
 } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
@@ -84,7 +85,7 @@ async function updateLastActivity(spaceId: string) {
 // ─── Écran principal ──────────────────────────────────────────────────────────
 export default function SlotsScreen() {
   const ctx = useVisitorSpace();
-  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations } = ctx;
+  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token } = ctx;
   const C = themes[space?.theme ?? "blue"];
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
@@ -128,6 +129,10 @@ export default function SlotsScreen() {
   }
 
   function openBooking(target: BookingTarget) {
+    if (target.type === "Visite" && isSlotPast(toISO(selectedDay), target.slot)) {
+      showToast("Ce créneau est déjà passé.");
+      return;
+    }
     if (target.type === "Visite" && !space?.premium) {
       const visitCount = reservations.filter(r => r.type === "Visite").length;
       if (visitCount >= 5) {
@@ -160,9 +165,20 @@ export default function SlotsScreen() {
   }
 
   // ── Booking ─────────────────────────────────────────────────────────────────
+  // NB: the booking modal is a native <Modal>, rendered above the rest of the
+  // screen — the toast banner lives below it and would be invisible while
+  // this modal is open. Use Alert (also native, always on top) for feedback
+  // here instead of showToast.
   async function handleBook() {
     if (!space || !slotConfig || !bookingTarget) return;
-    if (!prenom.trim() || !nom.trim() || pinValue.length < 4) return;
+    if (!prenom.trim() || !nom.trim()) {
+      Alert.alert("Champs manquants", "Indique ton prénom et ton nom.");
+      return;
+    }
+    if (pinValue.length < 4) {
+      Alert.alert("Code PIN incomplet", "Choisis un code PIN à 4 chiffres sur le clavier ci-dessus.");
+      return;
+    }
 
     setSaving(true);
     const iso = toISO(selectedDay);
@@ -181,12 +197,18 @@ export default function SlotsScreen() {
     setSaving(false);
 
     if (error) {
-      showToast("Erreur lors de la réservation : " + error.message);
+      Alert.alert("Erreur lors de la réservation", error.message);
       return;
     }
 
     await updateLastActivity(space.id);
     await refreshReservations();
+    await saveVisitorSession({
+      token,
+      spaceId: space.id,
+      prenom: prenom.trim(),
+      nom: nom.trim(),
+    });
 
     const notifSlot = bookingTarget.type === "Nuit" ? "18:00" : bookingTarget.slot;
 
@@ -346,11 +368,12 @@ export default function SlotsScreen() {
         {slots.map((slot) => {
           const occ = getSlotOccupancy(reservations, iso, slot);
           const full = occ.length >= slotConfig.max_visitors_per_slot;
+          const past = isSlotPast(iso, slot);
 
           return (
             <View
               key={slot}
-              style={[styles.slotCard, { backgroundColor: C.card, borderColor: full ? "rgba(233,69,96,0.3)" : C.border }]}
+              style={[styles.slotCard, { backgroundColor: C.card, borderColor: full ? "rgba(233,69,96,0.3)" : C.border, opacity: past ? 0.5 : 1 }]}
             >
               <View style={styles.slotLeft}>
                 <Text style={[styles.slotTime, { color: C.gold }]}>{slot}</Text>
@@ -369,7 +392,7 @@ export default function SlotsScreen() {
                   ))
                 }
               </View>
-              {!full && (
+              {!full && !past && (
                 <TouchableOpacity
                   style={[styles.reserveBtn, { backgroundColor: C.accent }]}
                   onPress={() => openBooking({ slot, type: "Visite" })}
@@ -378,9 +401,14 @@ export default function SlotsScreen() {
                   <Text style={styles.reserveBtnText}>+ Réserver</Text>
                 </TouchableOpacity>
               )}
-              {full && (
+              {full && !past && (
                 <View style={[styles.fullBadge, { borderColor: C.border }]}>
                   <Text style={[styles.fullBadgeText, { color: C.muted }]}>Complet</Text>
+                </View>
+              )}
+              {past && (
+                <View style={[styles.fullBadge, { borderColor: C.border }]}>
+                  <Text style={[styles.fullBadgeText, { color: C.muted }]}>Passé</Text>
                 </View>
               )}
             </View>
@@ -489,11 +517,11 @@ export default function SlotsScreen() {
                     </TouchableOpacity>
                     <TouchableOpacity
                       onPress={handleBook}
-                      disabled={!prenom.trim() || !nom.trim() || pinValue.length < 4 || saving}
+                      disabled={saving}
                       style={[
                         styles.btnPrimary,
                         { backgroundColor: C.accent },
-                        (!prenom.trim() || !nom.trim() || pinValue.length < 4 || saving) && { opacity: 0.5 },
+                        (!prenom.trim() || !nom.trim() || pinValue.length < 4) && { opacity: 0.5 },
                       ]}
                     >
                       {saving

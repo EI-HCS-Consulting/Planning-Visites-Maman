@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, Image, ActivityIndicator } fr
 import { useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { themes } from "@/lib/themes";
+import { getVisitorSession } from "@/lib/visitorSession";
 
 const C = themes.blue;
 
@@ -11,12 +12,25 @@ export default function WelcomeScreen() {
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session) {
         router.replace("/(admin)/dashboard");
-      } else {
-        setChecking(false);
+        return;
       }
+
+      // No admin session — check for a remembered visitor session so a
+      // returning visitor lands straight on the calendar instead of
+      // having to paste their invite link again.
+      const visitor = await getVisitorSession();
+      if (visitor) {
+        router.replace({
+          pathname: "/(visitor)/calendar",
+          params: { spaceId: visitor.spaceId, token: visitor.token },
+        });
+        return;
+      }
+
+      setChecking(false);
     });
   }, []);
 
@@ -47,7 +61,7 @@ export default function WelcomeScreen() {
           onPress={() => router.push("/auth/visitor-entry")}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnPrimaryText}>🔗 J'ai un lien d'invitation</Text>
+          <Text style={styles.btnPrimaryText}>📅 Je rends visite</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -55,7 +69,7 @@ export default function WelcomeScreen() {
           onPress={() => router.push("/auth/login")}
           activeOpacity={0.85}
         >
-          <Text style={styles.btnSecondaryText}>🔐 Je gère un espace</Text>
+          <Text style={styles.btnSecondaryText}>🙋 Je suis Admin</Text>
         </TouchableOpacity>
       </View>
 

@@ -48,6 +48,15 @@ export function getDayStatus(
   return "partial";
 }
 
+// A slot whose start time has already gone by today can't be booked —
+// only relevant for the current day, any other date is never "past" here.
+export function isSlotPast(iso: string, slot: string): boolean {
+  const now = new Date();
+  if (iso !== toISO(now)) return false;
+  const [h, m] = slot.split(":").map(Number);
+  return h + m / 60 <= now.getHours() + now.getMinutes() / 60;
+}
+
 export function getSlotOccupancy(
   reservations: Reservation[],
   iso: string,
