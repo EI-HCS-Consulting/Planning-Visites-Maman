@@ -4,9 +4,9 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { View } from "react-native";
 import {
-  DM_Sans_400Regular,
-  DM_Sans_600SemiBold,
-  DM_Sans_700Bold,
+  DMSans_400Regular,
+  DMSans_600SemiBold,
+  DMSans_700Bold,
 } from "@expo-google-fonts/dm-sans";
 import {
   PlayfairDisplay_700Bold,
@@ -14,10 +14,13 @@ import {
 } from "@expo-google-fonts/playfair-display";
 
 export default function RootLayout() {
+  // Clés explicites avec underscore ("DM_Sans_...") pour matcher les noms de
+  // famille déjà référencés dans tous les StyleSheets — les exports du
+  // package utilisent "DMSans_..." (sans underscore après DM).
   const [fontsLoaded, fontError] = useFonts({
-    DM_Sans_400Regular,
-    DM_Sans_600SemiBold,
-    DM_Sans_700Bold,
+    DM_Sans_400Regular: DMSans_400Regular,
+    DM_Sans_600SemiBold: DMSans_600SemiBold,
+    DM_Sans_700Bold: DMSans_700Bold,
     PlayfairDisplay_700Bold,
     PlayfairDisplay_400Regular,
   });
