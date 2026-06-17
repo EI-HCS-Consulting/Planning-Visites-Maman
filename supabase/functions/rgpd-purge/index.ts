@@ -80,7 +80,7 @@ async function sendPurgeAlert(
 
   <div style="background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:16px;margin:20px 0">
     <strong>Vous souhaitez conserver les données plus longtemps ?</strong><br/>
-    Ouvrez l'application AvecToi → Paramètres → "Prolonger de 90 jours".
+    Ouvrez l'application AvecToi → Paramètres → "Prolonger de 30 jours".
   </div>
 
   <p style="color:#999;font-size:12px;margin-top:24px">

@@ -13,6 +13,7 @@ import type { Theme } from "@/lib/themes";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 const PHOTO_BUCKET = "news-photos";
+const SOUVENIRS_BUCKET = "souvenirs";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface NewsEntryWithUrls extends NewsEntry {
@@ -46,6 +47,16 @@ function frDateShort(iso: string) {
 
 function avatarInitial(prenom: string) {
   return prenom.trim().charAt(0).toUpperCase() || "?";
+}
+
+// Même règle de slug que SouvenirsGallery.tsx, pour des noms de fichier cohérents.
+function sanitize(str: string) {
+  return str
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-zA-Z0-9]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 // ─── Composant principal ──────────────────────────────────────────────────────
@@ -175,7 +186,42 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
   }
 
   // ── Upload photos ──────────────────────────────────────────────────────────
-  async function uploadNewPhotos(photos: { uri: string; filename: string }[]): Promise<string[]> {
+  // Copie chaque photo de Nouvelle vers le bucket/table Souvenirs (ajout, pas
+  // déplacement — la photo reste aussi visible dans le fil Nouvelles).
+  // Best-effort : un échec de sync ne doit pas faire échouer la publication.
+  async function syncPhotoToSouvenirs(blob: Blob, authorPrenom: string, authorNom: string, authorPin: string) {
+    try {
+      const ts = String(Date.now());
+      const prenomClean = sanitize(authorPrenom.trim()) || "Anonyme";
+      const rand = Math.random().toString(36).slice(2, 6);
+      const filename = `${ts}_${rand}__${prenomClean}.jpg`;
+      const storagePath = `${spaceId}/${filename}`;
+
+      const { error: storageErr } = await supabase.storage
+        .from(SOUVENIRS_BUCKET)
+        .upload(storagePath, blob, { contentType: "image/jpeg", cacheControl: "3600" });
+      if (storageErr) return;
+
+      const { error: dbErr } = await supabase.from("souvenirs").insert({
+        space_id: spaceId,
+        filename,
+        caption: "",
+        uploaded_by_prenom: authorPrenom.trim(),
+        uploaded_by_nom: authorNom.trim(),
+        uploaded_by_pin: authorPin,
+      });
+      if (dbErr) await supabase.storage.from(SOUVENIRS_BUCKET).remove([storagePath]);
+    } catch {
+      /* sync vers Souvenirs en best-effort */
+    }
+  }
+
+  async function uploadNewPhotos(
+    photos: { uri: string; filename: string }[],
+    authorPrenom: string,
+    authorNom: string,
+    authorPin: string,
+  ): Promise<string[]> {
     const filenames: string[] = [];
     for (const photo of photos) {
       // Skip already-uploaded photos (uri starts with https)
@@ -196,7 +242,10 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
         const { error } = await supabase.storage
           .from(PHOTO_BUCKET)
           .upload(`${spaceId}/${fname}`, blob, { contentType: "image/jpeg", cacheControl: "3600" });
-        if (!error) filenames.push(fname);
+        if (!error) {
+          filenames.push(fname);
+          await syncPhotoToSouvenirs(blob, authorPrenom, authorNom, authorPin);
+        }
       } catch {
         /* skip failed photo */
       }
@@ -212,7 +261,10 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
 
     // Upload new photos
     const newPhotosCount = formPhotos.filter((p) => !p.uri.startsWith("http")).length;
-    const uploadedFilenames = await uploadNewPhotos(formPhotos);
+    // En édition, le PIN déjà validé n'est pas dans formPin (saisi via la
+    // modale PIN séparée) — on réutilise celui de l'entrée d'origine.
+    const authorPin = editTarget ? editTarget.author_pin : (isAdmin ? "ADMIN" : formPin);
+    const uploadedFilenames = await uploadNewPhotos(formPhotos, formPrenom, formNom, authorPin);
     const keptCount = formPhotos.filter((p) => p.uri.startsWith("http")).length;
     const newlyUploadedCount = uploadedFilenames.length - keptCount;
     if (newlyUploadedCount < newPhotosCount) {

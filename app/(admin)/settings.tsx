@@ -45,6 +45,17 @@ export default function SettingsScreen() {
     }
   }, [space]);
 
+  // Service de l'hôpital (hospital_sector)
+  const sectorInit = useRef(false);
+  const [sector, setSector] = useState("");
+  const [sectorSaving, setSectorSaving] = useState(false);
+  useEffect(() => {
+    if (space && !sectorInit.current) {
+      sectorInit.current = true;
+      setSector(space.hospital_sector ?? "");
+    }
+  }, [space]);
+
   // Nuitées toggle
   const [nightToggling, setNightToggling] = useState(false);
 
@@ -64,6 +75,19 @@ export default function SettingsScreen() {
     setNotesSaving(false);
     if (error) showToast("Erreur lors de la sauvegarde.");
     else showToast("Message enregistré ✓");
+  }
+
+  // ── Service de l'hôpital ───────────────────────────────────────────────────
+  async function handleSaveSector() {
+    if (!space) return;
+    setSectorSaving(true);
+    const { error } = await supabase
+      .from("patient_spaces")
+      .update({ hospital_sector: sector.trim() || null })
+      .eq("id", space.id);
+    setSectorSaving(false);
+    if (error) showToast("Erreur lors de la sauvegarde.");
+    else showToast("Service enregistré ✓");
   }
 
   // ── Nuitées toggle ─────────────────────────────────────────────────────────
@@ -173,7 +197,7 @@ export default function SettingsScreen() {
     if (!space) return;
     Alert.alert(
       "Prolonger l'espace",
-      "Ajouter 90 jours à la date de conservation ? Toutes les données seront conservées 90 jours de plus.",
+      "Ajouter 30 jours à la date de conservation ? Toutes les données seront conservées 30 jours de plus.",
       [
         { text: "Annuler", style: "cancel" },
         {
@@ -183,11 +207,11 @@ export default function SettingsScreen() {
 
             const currentPurge = new Date(space.purge_scheduled_at);
             const newPurge = new Date(currentPurge);
-            newPurge.setDate(newPurge.getDate() + 90);
+            newPurge.setDate(newPurge.getDate() + 30);
 
             const currentEnd = new Date(space.end_date + "T00:00:00");
             const newEnd = new Date(currentEnd);
-            newEnd.setDate(newEnd.getDate() + 90);
+            newEnd.setDate(newEnd.getDate() + 30);
 
             const { error } = await supabase
               .from("patient_spaces")
@@ -201,7 +225,7 @@ export default function SettingsScreen() {
             if (error) {
               showToast("Erreur lors de la prolongation.");
             } else {
-              showToast("Espace prolongé de 90 jours ✓");
+              showToast("Espace prolongé de 30 jours ✓");
             }
           },
         },
@@ -348,8 +372,33 @@ export default function SettingsScreen() {
                 })}
               </View>
             </View>
-            {/* ── Section : Message de l'organisateur ──────────────────────── */}
-            <Text style={[styles.sectionTitle, { color: C.gold }]}>Message de l'organisateur</Text>
+            {/* ── Section : Service de l'hôpital ────────────────────────────── */}
+            <Text style={[styles.sectionTitle, { color: C.gold }]}>Service de l'hôpital</Text>
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.cardDesc, { color: C.muted }]}>
+                Affiché dans le bandeau (ex : "Secteur A"), entre le service et la chambre.
+              </Text>
+              <TextInput
+                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                placeholder="Ex : Secteur A"
+                placeholderTextColor={C.muted}
+                value={sector}
+                onChangeText={setSector}
+              />
+              <TouchableOpacity
+                style={[styles.saveNotesBtn, { backgroundColor: C.accent }, sectorSaving && { opacity: 0.6 }]}
+                onPress={handleSaveSector}
+                disabled={sectorSaving}
+              >
+                {sectorSaving
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.saveNotesBtnText}>Enregistrer le service</Text>
+                }
+              </TouchableOpacity>
+            </View>
+
+            {/* ── Section : Consignes de visite ─────────────────────────────── */}
+            <Text style={[styles.sectionTitle, { color: C.gold }]}>Consignes de visite</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.cardDesc, { color: C.muted }]}>
                 Affiché aux visiteurs dans l'onglet Infos.
@@ -374,7 +423,7 @@ export default function SettingsScreen() {
               >
                 {notesSaving
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.saveNotesBtnText}>Enregistrer le message</Text>
+                  : <Text style={styles.saveNotesBtnText}>Enregistrer les consignes</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -462,7 +511,7 @@ export default function SettingsScreen() {
                 >
                   {prolonging
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.prolongBtnText}>⏳ Prolonger de 90 jours</Text>
+                    : <Text style={styles.prolongBtnText}>⏳ Prolonger de 30 jours (renouvelable gratuitement)</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -548,6 +597,13 @@ const styles = StyleSheet.create({
   rgpdDays: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginTop: 4 },
   prolongBtn: { borderRadius: 10, paddingVertical: 13, alignItems: "center", justifyContent: "center" },
   prolongBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
+
+  // Service de l'hôpital
+  sectorInput: {
+    borderWidth: 1, borderRadius: 10, padding: 12,
+    fontFamily: "DM_Sans_400Regular", fontSize: 14,
+    marginBottom: 12,
+  },
 
   // Admin notes
   warningText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginBottom: 10 },

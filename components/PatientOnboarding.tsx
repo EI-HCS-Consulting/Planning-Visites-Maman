@@ -19,22 +19,36 @@ const THEME_SWATCHES: Record<ThemeKey, string> = {
 };
 const THEME_ORDER: ThemeKey[] = ["blue", "red", "pink", "green", "yellow", "orange"];
 
-// Sensible defaults — admin can refine slot timing later; the onboarding
-// form itself only covers patient identity + hospital info + visit rules.
-const DEFAULT_SLOT_CONFIG = {
+// Horaires par défaut pré-remplis dans le formulaire — l'admin les ajuste
+// dès la création de l'espace au lieu de devoir passer par Paramètres.
+const DEFAULT_HOURS = {
   visit_start_hour: 14,
   visit_end_hour: 20,
   slot_duration_minutes: 30,
   min_gap_minutes: 0,
+};
+
+// Pas encore saisissables à l'onboarding — réglables ensuite dans Paramètres.
+const FIXED_SLOT_CONFIG = {
   max_visitors_per_slot: 2,
   night_enabled: false,
   max_night_visitors: 1,
 };
 
-const SPACE_DURATION_DAYS = 90; // matches the "Prolonger de 90 jours" RGPD cycle
+const SPACE_DURATION_DAYS = 30; // matches the "Prolonger de 30 jours" RGPD cycle
 
 function isoDate(d: Date) {
   return d.toISOString().split("T")[0];
+}
+
+function parseHour(value: string, fallback: number) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n >= 0 && n <= 23 ? n : fallback;
+}
+
+function parseMinutes(value: string, fallback: number) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 
 /**
@@ -50,12 +64,19 @@ export default function PatientOnboarding() {
   const [lastname, setLastname] = useState("");
   const [hospitalName, setHospitalName] = useState("");
   const [hospitalService, setHospitalService] = useState("");
+  const [hospitalSector, setHospitalSector] = useState("");
   const [hospitalRoom, setHospitalRoom] = useState("");
   const [hospitalAddress, setHospitalAddress] = useState("");
   const [hospitalMapsUrl, setHospitalMapsUrl] = useState("");
   const [visitRules, setVisitRules] = useState("");
   const [theme, setTheme] = useState<ThemeKey>("blue");
   const [submitting, setSubmitting] = useState(false);
+
+  // Horaires de visite (pré-remplis, modifiables avant création de l'espace)
+  const [visitStartHour, setVisitStartHour] = useState(String(DEFAULT_HOURS.visit_start_hour));
+  const [visitEndHour, setVisitEndHour] = useState(String(DEFAULT_HOURS.visit_end_hour));
+  const [slotDuration, setSlotDuration] = useState(String(DEFAULT_HOURS.slot_duration_minutes));
+  const [minGap, setMinGap] = useState(String(DEFAULT_HOURS.min_gap_minutes));
 
   const canSubmit = firstname.trim().length > 0 && lastname.trim().length > 0 && !submitting;
 
@@ -79,6 +100,7 @@ export default function PatientOnboarding() {
           patient_lastname: lastname.trim(),
           hospital_name: hospitalName.trim(),
           hospital_service: hospitalService.trim(),
+          hospital_sector: hospitalSector.trim() || null,
           hospital_room: hospitalRoom.trim(),
           hospital_address: hospitalAddress.trim(),
           hospital_maps_url: hospitalMapsUrl.trim(),
@@ -97,9 +119,18 @@ export default function PatientOnboarding() {
 
       if (spaceErr || !space) throw spaceErr ?? new Error("Création de l'espace impossible.");
 
+      const startHour = parseHour(visitStartHour, DEFAULT_HOURS.visit_start_hour);
+      const endHour = parseHour(visitEndHour, DEFAULT_HOURS.visit_end_hour);
       const { error: slotErr } = await supabase
         .from("slot_config")
-        .insert({ space_id: space.id, ...DEFAULT_SLOT_CONFIG });
+        .insert({
+          space_id: space.id,
+          visit_start_hour: endHour > startHour ? startHour : DEFAULT_HOURS.visit_start_hour,
+          visit_end_hour: endHour > startHour ? endHour : DEFAULT_HOURS.visit_end_hour,
+          slot_duration_minutes: parseMinutes(slotDuration, DEFAULT_HOURS.slot_duration_minutes) || DEFAULT_HOURS.slot_duration_minutes,
+          min_gap_minutes: parseMinutes(minGap, DEFAULT_HOURS.min_gap_minutes),
+          ...FIXED_SLOT_CONFIG,
+        });
 
       if (slotErr) throw slotErr;
 
@@ -158,6 +189,13 @@ export default function PatientOnboarding() {
           />
           <TextInput
             style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+            placeholder="Service de l'hôpital (ex : Secteur A)"
+            placeholderTextColor={C.muted}
+            value={hospitalSector}
+            onChangeText={setHospitalSector}
+          />
+          <TextInput
+            style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
             placeholder="N° de chambre"
             placeholderTextColor={C.muted}
             value={hospitalRoom}
@@ -179,6 +217,49 @@ export default function PatientOnboarding() {
             autoCapitalize="none"
             keyboardType="url"
           />
+        </View>
+
+        <Text style={[styles.sectionTitle, { color: C.gold }]}>Horaires de visite</Text>
+        <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          <Text style={[styles.cardDesc, { color: C.muted }]}>
+            Réglable plus tard dans Paramètres si besoin.
+          </Text>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+              placeholder="Début (ex : 14)"
+              placeholderTextColor={C.muted}
+              value={visitStartHour}
+              onChangeText={setVisitStartHour}
+              keyboardType="number-pad"
+            />
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+              placeholder="Fin (ex : 20)"
+              placeholderTextColor={C.muted}
+              value={visitEndHour}
+              onChangeText={setVisitEndHour}
+              keyboardType="number-pad"
+            />
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+              placeholder="Durée/visite (min)"
+              placeholderTextColor={C.muted}
+              value={slotDuration}
+              onChangeText={setSlotDuration}
+              keyboardType="number-pad"
+            />
+            <TextInput
+              style={[styles.input, { flex: 1, backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+              placeholder="Pause entre visites (min)"
+              placeholderTextColor={C.muted}
+              value={minGap}
+              onChangeText={setMinGap}
+              keyboardType="number-pad"
+            />
+          </View>
         </View>
 
         <Text style={[styles.sectionTitle, { color: C.gold }]}>Consignes de visite</Text>
