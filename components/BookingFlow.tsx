@@ -9,9 +9,9 @@ import * as ExpoCalendar from "expo-calendar";
 import { scheduleVisitReminder, cancelVisitReminder } from "@/lib/notifications";
 import { linkCalendarEvent, getLinkedCalendarEvent, unlinkCalendarEvent } from "@/lib/calendarSync";
 import { supabase } from "@/lib/supabase";
-import { getVisitorSession, saveVisitorSession } from "@/lib/visitorSession";
+import { getVisitorSession, saveVisitorSession, sessionPinMatches } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
-import { getSlotOccupancy, getDaysInMonth, isSlotPast, toISO, toFrLong, toFrShort } from "@/lib/slotUtils";
+import { getSlotOccupancy, getDaysInMonth, isSlotPast, isReservationDatePast, toISO, toFrLong, toFrShort } from "@/lib/slotUtils";
 import type { Reservation, SlotConfig, PatientSpace } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
 
@@ -91,7 +91,7 @@ async function addToNativeCalendar(
     const { startDate, endDate } = eventWindow(iso, slot, type, config.slot_duration_minutes);
 
     const eventId = await ExpoCalendar.createEventAsync(target.id, {
-      title: `Visite ${space.patient_firstname} ${space.patient_lastname}`,
+      title: `${type === "Nuit" ? "Nuitée" : "Visite"} ${space.patient_firstname} ${space.patient_lastname}`,
       startDate,
       endDate,
       location: `${space.hospital_name}${space.hospital_room ? " — " + space.hospital_room : ""}`,
@@ -166,6 +166,10 @@ function BookingFlow(
   const [pinError, setPinError] = useState(false);
   const [pinStep, setPinStep] = useState<"enter" | "actions">("enter");
   const [pinDeleting, setPinDeleting] = useState(false);
+  // Reflète si la réservation ouverte via PIN a déjà un événement calendrier
+  // lié (storage local) — distinct de calendarAdded, qui ne suit que le flux
+  // juste après une nouvelle réservation.
+  const [pinCalendarAdded, setPinCalendarAdded] = useState(false);
 
   const [editModal, setEditModal] = useState<Reservation | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -203,9 +207,16 @@ function BookingFlow(
     setCalendarAdded(false);
   }
 
-  function openPinModal(r: Reservation) {
+  async function openPinModal(r: Reservation) {
     setPinModal(r);
-    setPinEntry(""); setPinError(false); setPinStep("enter");
+    setPinCalendarAdded(false);
+    getLinkedCalendarEvent(r.id).then((eventId) => setPinCalendarAdded(!!eventId));
+
+    if (await sessionPinMatches(r.pin)) {
+      setPinEntry(r.pin); setPinError(false); setPinStep("actions");
+    } else {
+      setPinEntry(""); setPinError(false); setPinStep("enter");
+    }
   }
 
   useImperativeHandle(ref, () => ({ openBooking, openPinModal }));
@@ -258,7 +269,7 @@ function BookingFlow(
 
     await updateLastActivity(space.id);
     await refreshReservations();
-    await saveVisitorSession({ token, spaceId: space.id, prenom: prenom.trim(), nom: nom.trim() });
+    await saveVisitorSession({ token, spaceId: space.id, prenom: prenom.trim(), nom: nom.trim(), pin: pinValue });
 
     setConfirmed({ id: newResa?.id ?? "", prenom: prenom.trim(), pin: pinValue, iso, slot });
 
@@ -268,7 +279,7 @@ function BookingFlow(
   }
 
   async function handleCancel() {
-    if (!pinModal) return;
+    if (!pinModal || isReservationDatePast(pinModal.date)) return;
     setPinDeleting(true);
 
     const { error, count } = await supabase.from("reservations").delete({ count: "exact" }).eq("id", pinModal.id);
@@ -301,6 +312,7 @@ function BookingFlow(
   }
 
   function openEdit(r: Reservation) {
+    if (isReservationDatePast(r.date)) return;
     const d = new Date(r.date + "T12:00:00");
     setEditDate(r.date);
     setEditSlot(r.type === "Nuit" ? null : r.creneau);
@@ -359,6 +371,23 @@ function BookingFlow(
       if (confirmed.id) await linkCalendarEvent(confirmed.id, result.eventId);
       setCalendarAdded(true);
       showToast("Créneau ajouté à votre calendrier ✓");
+    } else {
+      Alert.alert("Calendrier", "Impossible d'ajouter l'événement : " + result.reason);
+    }
+  }
+
+  // Même logique que handleAddToCalendar, mais pour une réservation déjà
+  // existante ouverte via le PIN (ex. nuitée passée par "Mon compte" qui
+  // n'est jamais passée par l'écran de confirmation de réservation).
+  async function handleAddToCalendarFromPin() {
+    if (!pinModal) return;
+    const session = await getVisitorSession();
+    const slotForEvent = pinModal.type === "Nuit" ? "18:00" : pinModal.creneau;
+    const result = await addToNativeCalendar(space, slotConfig, pinModal.date, slotForEvent, pinModal.type, session?.email || null);
+    if (result.ok) {
+      await linkCalendarEvent(pinModal.id, result.eventId);
+      setPinCalendarAdded(true);
+      showToast(pinModal.type === "Nuit" ? "Nuitée ajoutée à votre calendrier ✓" : "Créneau ajouté à votre calendrier ✓");
     } else {
       Alert.alert("Calendrier", "Impossible d'ajouter l'événement : " + result.reason);
     }
@@ -531,20 +560,41 @@ function BookingFlow(
                   </Text>
                 </View>
 
-                <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.accent }]} onPress={() => pinModal && openEdit(pinModal)}>
-                  <Text style={styles.actionBtnText}>✏️ Modifier ma réservation</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.calendarBtn,
+                    { borderColor: pinCalendarAdded ? C.success : "rgba(52,168,83,0.4)", backgroundColor: "rgba(52,168,83,0.1)" },
+                  ]}
+                  onPress={handleAddToCalendarFromPin}
+                  disabled={pinCalendarAdded}
+                >
+                  <Text style={[styles.calendarBtnText, { color: pinCalendarAdded ? C.success : "#3da85e" }]}>
+                    {pinCalendarAdded ? "✅ Ajouté au calendrier" : "📅 Ajouter à mon calendrier"}
+                  </Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.actionBtnDanger, { borderColor: "rgba(233,69,96,0.35)", backgroundColor: "rgba(233,69,96,0.1)" }]}
-                  onPress={handleCancel}
-                  disabled={pinDeleting}
-                >
-                  {pinDeleting
-                    ? <ActivityIndicator color={C.danger} size="small" />
-                    : <Text style={[styles.actionBtnText, { color: C.danger }]}>🗑️ Annuler ma visite</Text>
-                  }
-                </TouchableOpacity>
+                {pinModal && isReservationDatePast(pinModal.date) ? (
+                  <Text style={[styles.sheetSub, { color: C.muted, marginTop: 12, textAlign: "center" }]}>
+                    {pinModal.type === "Nuit" ? "Cette nuitée" : "Cette visite"} est passée, elle ne peut plus être modifiée ni annulée.
+                  </Text>
+                ) : (
+                  <>
+                    <TouchableOpacity style={[styles.actionBtn, { backgroundColor: C.accent, marginTop: 10 }]} onPress={() => pinModal && openEdit(pinModal)}>
+                      <Text style={styles.actionBtnText}>✏️ Modifier ma réservation</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtnDanger, { borderColor: "rgba(233,69,96,0.35)", backgroundColor: "rgba(233,69,96,0.1)" }]}
+                      onPress={handleCancel}
+                      disabled={pinDeleting}
+                    >
+                      {pinDeleting
+                        ? <ActivityIndicator color={C.danger} size="small" />
+                        : <Text style={[styles.actionBtnText, { color: C.danger }]}>🗑️ Annuler ma visite</Text>
+                      }
+                    </TouchableOpacity>
+                  </>
+                )}
 
                 <TouchableOpacity onPress={() => setPinModal(null)} style={[styles.btnSecondary, { borderColor: C.border, marginTop: 8 }]}>
                   <Text style={[styles.btnSecondaryText, { color: C.muted }]}>Fermer</Text>

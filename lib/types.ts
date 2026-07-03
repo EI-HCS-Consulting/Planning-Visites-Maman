@@ -36,6 +36,8 @@ export interface SlotConfig {
   max_visitors_per_slot: number;
   night_enabled: boolean;
   max_night_visitors: number;
+  allowed_weekdays: number[];
+  blocked_dates: string[];
 }
 
 export interface Reservation {
@@ -60,6 +62,8 @@ export interface SouvenirPhoto {
   uploaded_by_prenom: string;
   uploaded_by_nom: string;
   uploaded_by_pin: string;
+  source_type: "news" | "support" | null;
+  source_id: string | null;
   created_at: string;
   url?: string;
 }
@@ -86,7 +90,11 @@ export interface Task {
   claimed_by_prenom: string | null;
   claimed_by_nom: string | null;
   claimed_by_pin: string | null;
+  claimed_photo: string | null;
+  claimed_text: string | null;
+  done_photo: string | null;
   created_by: string;
+  photo: string | null;
   created_at: string;
 }
 
@@ -96,5 +104,7 @@ export interface SupportMessage {
   message: string;
   author_prenom: string;
   author_nom: string;
+  author_pin: string | null;
+  photo: string | null;
   created_at: string;
 }

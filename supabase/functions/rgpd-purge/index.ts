@@ -12,7 +12,7 @@ function json(data: unknown, status = 200) {
   });
 }
 
-const STORAGE_BUCKETS = ["souvenirs", "news-photos", "patient-photos"];
+const STORAGE_BUCKETS = ["souvenirs", "news-photos", "patient-photos", "entraide-photos", "support-photos"];
 
 async function deleteStorageFolder(
   supabase: ReturnType<typeof createClient>,

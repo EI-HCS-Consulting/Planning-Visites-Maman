@@ -1,12 +1,16 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
   FlatList, Image, Modal, StyleSheet, Alert, ActivityIndicator,
   KeyboardAvoidingView, Platform, Dimensions,
 } from "react-native";
+import { useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
+import { File } from "expo-file-system";
 import { supabase } from "@/lib/supabase";
+import { blobToArrayBuffer } from "@/lib/blobToArrayBuffer";
+import { getVisitorSession, rememberAuthorPin, sessionPinMatches } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
 import type { NewsEntry } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
@@ -61,6 +65,11 @@ function sanitize(str: string) {
 
 // ─── Composant principal ──────────────────────────────────────────────────────
 export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
+  const { focusEntryId } = useLocalSearchParams<{ focusEntryId?: string }>();
+  const listRef = useRef<FlatList<NewsEntryWithUrls>>(null);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+  const focusedRef = useRef(false);
+
   const [entries, setEntries] = useState<NewsEntryWithUrls[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -84,6 +93,11 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
 
   // Lightbox
   const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null);
+
+  // Ajout manuel au mur de Souvenirs (entry.id en cours de synchro)
+  const [syncingToSouvenirs, setSyncingToSouvenirs] = useState<string | null>(null);
+
+  const [sessionPin, setSessionPin] = useState("");
 
   const [toast, setToast] = useState("");
 
@@ -117,6 +131,22 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
 
   useEffect(() => { loadEntries(); }, [loadEntries]);
 
+  // Arrivée depuis Souvenirs ("Voir l'original") via un lien profond
+  // (?focusEntryId=...) : on scrolle jusqu'à la carte et on la surligne
+  // brièvement. focusedRef évite de re-déclencher le scroll à chaque
+  // rechargement realtime des entrées.
+  useEffect(() => {
+    if (!focusEntryId || focusedRef.current || loading) return;
+    const index = entries.findIndex((e) => e.id === focusEntryId);
+    if (index === -1) return;
+    focusedRef.current = true;
+    setHighlightId(focusEntryId);
+    setTimeout(() => {
+      listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.2 });
+    }, 300);
+    setTimeout(() => setHighlightId(null), 2500);
+  }, [focusEntryId, entries, loading]);
+
   // Realtime
   useEffect(() => {
     const channel = supabase
@@ -130,10 +160,18 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
   }, [spaceId, loadEntries]);
 
   // ── Form helpers ───────────────────────────────────────────────────────────
-  function openPublish() {
+  async function openPublish() {
     setEditTarget(null);
     setFormText(""); setFormPrenom(""); setFormNom(""); setFormPin("");
     setFormPhotos([]);
+    if (!isAdmin) {
+      const s = await getVisitorSession();
+      if (s) {
+        setFormPrenom(s.prenom);
+        setFormNom(s.nom);
+        if (s.pin) setSessionPin(s.pin);
+      }
+    }
     setShowForm(true);
   }
 
@@ -185,11 +223,13 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
     setFormPhotos((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  // ── Upload photos ──────────────────────────────────────────────────────────
-  // Copie chaque photo de Nouvelle vers le bucket/table Souvenirs (ajout, pas
+  // ── Ajout au mur de Souvenirs ──────────────────────────────────────────────
+  // Copie une photo de Nouvelle vers le bucket/table Souvenirs (ajout, pas
   // déplacement — la photo reste aussi visible dans le fil Nouvelles).
-  // Best-effort : un échec de sync ne doit pas faire échouer la publication.
-  async function syncPhotoToSouvenirs(blob: Blob, authorPrenom: string, authorNom: string, authorPin: string) {
+  // Déclenché manuellement par un bouton (pas automatique à la publication,
+  // voir addEntryPhotosToSouvenirs ci-dessous). Best-effort : un échec de
+  // sync ne doit pas bloquer le reste.
+  async function syncPhotoToSouvenirs(fileData: ArrayBuffer, authorPrenom: string, authorNom: string, authorPin: string, sourceId: string) {
     try {
       const ts = String(Date.now());
       const prenomClean = sanitize(authorPrenom.trim()) || "Anonyme";
@@ -199,7 +239,7 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
 
       const { error: storageErr } = await supabase.storage
         .from(SOUVENIRS_BUCKET)
-        .upload(storagePath, blob, { contentType: "image/jpeg", cacheControl: "3600" });
+        .upload(storagePath, fileData, { contentType: "image/jpeg", cacheControl: "3600" });
       if (storageErr) return;
 
       const { error: dbErr } = await supabase.from("souvenirs").insert({
@@ -209,6 +249,8 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
         uploaded_by_prenom: authorPrenom.trim(),
         uploaded_by_nom: authorNom.trim(),
         uploaded_by_pin: authorPin,
+        source_type: "news",
+        source_id: sourceId,
       });
       if (dbErr) await supabase.storage.from(SOUVENIRS_BUCKET).remove([storagePath]);
     } catch {
@@ -216,13 +258,37 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
     }
   }
 
+  // Bouton "Ajouter au mur de souvenirs" sur une nouvelle déjà publiée — relit
+  // chaque photo depuis news-photos puis la copie vers souvenirs.
+  async function addEntryPhotosToSouvenirs(entry: NewsEntryWithUrls) {
+    if (!entry.photos.length) return;
+    setSyncingToSouvenirs(entry.id);
+    let failed = 0;
+    for (const filename of entry.photos) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(PHOTO_BUCKET)
+          .download(`${spaceId}/${filename}`);
+        if (error || !data) { failed++; continue; }
+        const fileData = await blobToArrayBuffer(data);
+        await syncPhotoToSouvenirs(fileData, entry.author_prenom, entry.author_nom, entry.author_pin, entry.id);
+      } catch {
+        failed++;
+      }
+    }
+    setSyncingToSouvenirs(null);
+    if (failed) {
+      showToast(`${failed} photo(s) n'a/n'ont pas pu être ajoutée(s)`);
+    } else {
+      showToast("Ajouté au mur de souvenirs ✓");
+    }
+  }
+
   async function uploadNewPhotos(
     photos: { uri: string; filename: string }[],
-    authorPrenom: string,
-    authorNom: string,
-    authorPin: string,
-  ): Promise<string[]> {
+  ): Promise<{ filenames: string[]; lastError: string | null }> {
     const filenames: string[] = [];
+    let lastError: string | null = null;
     for (const photo of photos) {
       // Skip already-uploaded photos (uri starts with https)
       if (photo.uri.startsWith("http")) {
@@ -235,45 +301,47 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
           [{ resize: { width: 1080 } }],
           { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
         );
-        const response = await fetch(compressed.uri);
-        const blob = await response.blob();
+        // fetch(localUri).blob() est peu fiable sur expo-file-system v19
+        // (échoue souvent en "Network request failed") — lecture directe
+        // du fichier local via la nouvelle API File, sans passer par le réseau.
+        const fileData = await new File(compressed.uri).arrayBuffer();
         const ts = Date.now();
         const fname = `${ts}_${Math.random().toString(36).slice(2, 6)}.jpg`;
         const { error } = await supabase.storage
           .from(PHOTO_BUCKET)
-          .upload(`${spaceId}/${fname}`, blob, { contentType: "image/jpeg", cacheControl: "3600" });
+          .upload(`${spaceId}/${fname}`, fileData, { contentType: "image/jpeg", cacheControl: "3600" });
         if (!error) {
           filenames.push(fname);
-          await syncPhotoToSouvenirs(blob, authorPrenom, authorNom, authorPin);
+        } else {
+          lastError = error.message;
         }
-      } catch {
-        /* skip failed photo */
+      } catch (e) {
+        lastError = e instanceof Error ? e.message : String(e);
       }
     }
-    return filenames;
+    return { filenames, lastError };
   }
 
   // ── Save (create / edit) ───────────────────────────────────────────────────
   async function handleSave() {
     if (!formText.trim() || !formPrenom.trim() || !formNom.trim()) return;
-    if (!isAdmin && !editTarget && formPin.length < 4) return;
+    if (!isAdmin && !editTarget && !sessionPin && formPin.length < 4) return;
     setFormSaving(true);
 
     // Upload new photos
     const newPhotosCount = formPhotos.filter((p) => !p.uri.startsWith("http")).length;
-    // En édition, le PIN déjà validé n'est pas dans formPin (saisi via la
-    // modale PIN séparée) — on réutilise celui de l'entrée d'origine.
-    const authorPin = editTarget ? editTarget.author_pin : (isAdmin ? "ADMIN" : formPin);
-    const uploadedFilenames = await uploadNewPhotos(formPhotos, formPrenom, formNom, authorPin);
+    const { filenames: uploadedFilenames, lastError } = await uploadNewPhotos(formPhotos);
     const keptCount = formPhotos.filter((p) => p.uri.startsWith("http")).length;
     const newlyUploadedCount = uploadedFilenames.length - keptCount;
     if (newlyUploadedCount < newPhotosCount) {
-      // uploadNewPhotos() silently skips photos that fail to upload — warn
-      // instead of letting the post save with fewer photos than expected
-      // and no explanation.
+      // uploadNewPhotos() skips photos that fail to upload — warn instead of
+      // letting the post save with fewer photos than expected and no
+      // explanation. On affiche le détail technique pour pouvoir diagnostiquer
+      // (ex: policy Storage manquante sur ce bucket précis).
       Alert.alert(
         "Envoi de photo incomplet",
-        `${newPhotosCount - newlyUploadedCount} photo(s) sur ${newPhotosCount} n'a/n'ont pas pu être envoyée(s). La nouvelle sera publiée avec les autres.`,
+        `${newPhotosCount - newlyUploadedCount} photo(s) sur ${newPhotosCount} n'a/n'ont pas pu être envoyée(s). La nouvelle sera publiée avec les autres.` +
+          (lastError ? `\n\nDétail : ${lastError}` : ""),
       );
     }
 
@@ -317,12 +385,13 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
         content: formText.trim(),
         author_prenom: formPrenom.trim(),
         author_nom: formNom.trim(),
-        author_pin: isAdmin ? "ADMIN" : formPin,
+        author_pin: isAdmin ? "ADMIN" : (sessionPin || formPin),
         photos: uploadedFilenames,
       });
 
       setFormSaving(false);
       if (error) { Alert.alert("Erreur", "Erreur lors de la publication : " + error.message); return; }
+      if (!isAdmin) await rememberAuthorPin(formPrenom.trim(), formNom.trim(), sessionPin || formPin);
       showToast("Nouvelle publiée ✓");
     }
 
@@ -343,7 +412,7 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
     showToast("Nouvelle supprimée ✓");
   }
 
-  function requestDelete(entry: NewsEntryWithUrls) {
+  async function requestDelete(entry: NewsEntryWithUrls) {
     if (isAdmin) {
       Alert.alert(
         "Supprimer cette nouvelle ?",
@@ -353,19 +422,32 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
           { text: "Supprimer", style: "destructive", onPress: () => doDelete(entry) },
         ],
       );
-    } else {
-      setPinModal({ entry, action: "delete" });
-      setPinEntry(""); setPinError(false);
+      return;
     }
+    // Le PIN enregistré dans "Mon compte" (ou choisi à la publication) fait
+    // foi : s'il correspond, on évite de le redemander.
+    if (await sessionPinMatches(entry.author_pin)) {
+      Alert.alert(
+        "Supprimer cette nouvelle ?",
+        `"${entry.content.slice(0, 60)}${entry.content.length > 60 ? "…" : ""}"`,
+        [
+          { text: "Annuler", style: "cancel" },
+          { text: "Supprimer", style: "destructive", onPress: () => doDelete(entry) },
+        ],
+      );
+      return;
+    }
+    setPinModal({ entry, action: "delete" });
+    setPinEntry(""); setPinError(false);
   }
 
-  function requestEdit(entry: NewsEntryWithUrls) {
-    if (isAdmin) {
+  async function requestEdit(entry: NewsEntryWithUrls) {
+    if (isAdmin || (await sessionPinMatches(entry.author_pin))) {
       openEdit(entry);
-    } else {
-      setPinModal({ entry, action: "edit" });
-      setPinEntry(""); setPinError(false);
+      return;
     }
+    setPinModal({ entry, action: "edit" });
+    setPinEntry(""); setPinError(false);
   }
 
   function checkPin() {
@@ -384,8 +466,15 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
   // ── Render entry ───────────────────────────────────────────────────────────
   function renderEntry({ item: entry }: { item: NewsEntryWithUrls }) {
     const canModify = isAdmin || entry.author_pin !== "ADMIN";
+    const highlighted = highlightId === entry.id;
     return (
-      <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <View
+        style={[
+          styles.card,
+          { backgroundColor: C.card, borderColor: highlighted ? C.gold : C.border },
+          highlighted && { borderWidth: 2 },
+        ]}
+      >
         {/* Author + date */}
         <View style={styles.cardHeader}>
           <View style={[styles.avatar, { backgroundColor: C.accent }]}>
@@ -432,6 +521,20 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
             ))}
           </ScrollView>
         )}
+
+        {entry.photoUrls.length > 0 && (
+          <TouchableOpacity
+            style={[styles.souvenirsBtn, { borderColor: C.border }]}
+            onPress={() => addEntryPhotosToSouvenirs(entry)}
+            disabled={syncingToSouvenirs === entry.id}
+            activeOpacity={0.75}
+          >
+            {syncingToSouvenirs === entry.id
+              ? <ActivityIndicator color={C.gold} size="small" />
+              : <Text style={[styles.souvenirsBtnText, { color: C.gold }]}>📸 Ajouter au mur de souvenirs</Text>
+            }
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -460,11 +563,15 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
         </View>
       ) : (
         <FlatList
+          ref={listRef}
           data={entries}
           keyExtractor={(e) => e.id}
           renderItem={renderEntry}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
+          onScrollToIndexFailed={(info) => {
+            listRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: true });
+          }}
         />
       )}
 
@@ -502,13 +609,14 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
                   {/* Texte */}
                   <TextInput
                     style={[styles.input, styles.textarea, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                    placeholder="Raconte ta visite… comment allait-elle ? ✍️"
+                    placeholder="Donnez des nouvelles de votre visite… ✍️"
                     placeholderTextColor={C.muted}
                     value={formText}
                     onChangeText={setFormText}
                     multiline
                     numberOfLines={5}
                     textAlignVertical="top"
+                    autoFocus
                   />
 
                   {/* Photos */}
@@ -539,8 +647,8 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
                     </View>
                   </ScrollView>
 
-                  {/* PIN (visiteur uniquement, uniquement à la création) */}
-                  {!isAdmin && !editTarget && (
+                  {/* PIN (visiteur uniquement, à la création, si pas de PIN mémorisé) */}
+                  {!isAdmin && !editTarget && !sessionPin && (
                     <>
                       <Text style={[styles.fieldLabel, { color: C.gold }]}>
                         🔐 Code PIN (pour modifier ou supprimer)
@@ -561,14 +669,14 @@ export default function NewsFeed({ spaceId, C, isAdmin }: Props) {
                       onPress={handleSave}
                       disabled={
                         !formText.trim() || !formPrenom.trim() || !formNom.trim() ||
-                        (!isAdmin && !editTarget && formPin.length < 4) ||
+                        (!isAdmin && !editTarget && !sessionPin && formPin.length < 4) ||
                         formSaving
                       }
                       style={[
                         styles.btnPrimary,
                         { backgroundColor: C.accent },
                         (!formText.trim() || !formPrenom.trim() || !formNom.trim() ||
-                          (!isAdmin && !editTarget && formPin.length < 4) || formSaving) && { opacity: 0.5 },
+                          (!isAdmin && !editTarget && !sessionPin && formPin.length < 4) || formSaving) && { opacity: 0.5 },
                       ]}
                     >
                       {formSaving
@@ -717,6 +825,8 @@ const styles = StyleSheet.create({
   entryText: { fontFamily: "DM_Sans_400Regular", fontSize: 14, lineHeight: 22 },
   photoStrip: { paddingTop: 10, gap: 6 },
   photoThumb: { width: 100, height: 100, borderRadius: 10, borderWidth: 1 },
+  souvenirsBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 8, alignItems: "center", marginTop: 10 },
+  souvenirsBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
 
   // Overlay / sheet
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "flex-end" },

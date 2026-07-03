@@ -5,7 +5,10 @@ export function generateSlots(config: SlotConfig): string[] {
   const startMin = config.visit_start_hour * 60;
   const endMin = config.visit_end_hour * 60;
 
-  for (let m = startMin; m + config.slot_duration_minutes <= endMin; m += config.slot_duration_minutes) {
+  // min_gap_minutes est l'intervalle entre les débuts de créneaux.
+  // 0 = dos à dos (step = durée seule).
+  const step = config.min_gap_minutes > 0 ? config.min_gap_minutes : config.slot_duration_minutes;
+  for (let m = startMin; m + config.slot_duration_minutes <= endMin; m += step) {
     const h = Math.floor(m / 60);
     const min = m % 60;
     slots.push(`${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
@@ -33,6 +36,8 @@ export function getDayStatus(
   start.setHours(0, 0, 0, 0);
 
   if (d < start || d < today) return "past";
+  if (config.allowed_weekdays && !config.allowed_weekdays.includes(d.getDay())) return "past";
+  if (config.blocked_dates && config.blocked_dates.includes(iso)) return "past";
 
   // Les nuitées ont leur propre écran (Nuits) et n'influencent plus le point
   // de couleur du calendrier — uniquement basé sur l'occupation des
@@ -53,6 +58,14 @@ export function isSlotPast(iso: string, slot: string): boolean {
   if (iso !== toISO(now)) return false;
   const [h, m] = slot.split(":").map(Number);
   return h + m / 60 <= now.getHours() + now.getMinutes() / 60;
+}
+
+// Une réservation (visite ou nuitée) dont le jour est déjà passé ne peut
+// plus être modifiée ni annulée — le rendez-vous a déjà eu lieu.
+export function isReservationDatePast(date: string): boolean {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d = new Date(date + "T00:00:00");
+  return d < today;
 }
 
 export function getSlotOccupancy(
@@ -95,6 +108,8 @@ export function findNextAvailableSlot(
     const d = new Date(searchStart);
     d.setDate(d.getDate() + i);
     const iso = toISO(d);
+    if (config.allowed_weekdays && !config.allowed_weekdays.includes(d.getDay())) continue;
+    if (config.blocked_dates && config.blocked_dates.includes(iso)) continue;
 
     for (const slot of slots) {
       // isSlotPast() is a no-op for any day other than today, so this only
@@ -136,6 +151,8 @@ export function findNextAvailableNight(
     const d = new Date(searchStart);
     d.setDate(d.getDate() + i);
     const iso = toISO(d);
+    if (config.allowed_weekdays && !config.allowed_weekdays.includes(d.getDay())) continue;
+    if (config.blocked_dates && config.blocked_dates.includes(iso)) continue;
     if (!getNightReservation(reservations, iso)) {
       return { date: d, iso };
     }

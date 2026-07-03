@@ -1,4 +1,4 @@
-import { useRef, useMemo } from "react";
+import { useRef, useMemo, useEffect } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import SpaceHeader from "@/components/SpaceHeader";
@@ -8,12 +8,22 @@ import { themes } from "@/lib/themes";
 import type { Reservation } from "@/lib/types";
 
 export default function VisitorNightsScreen() {
-  const { space, slotConfig, reservations, token, refreshReservations } = useVisitorSpace();
+  const { space, slotConfig, reservations, token, refreshReservations, pendingEditReservationId, setPendingEditReservationId } = useVisitorSpace();
   const C = themes[space?.theme ?? "blue"];
   const flowRef = useRef<BookingFlowHandle>(null);
 
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const startDate = space ? new Date(space.start_date + "T00:00:00") : today;
+
+  // Arrivée via "Mon compte" > "Mes réservations" sur une nuitée : rouvre la
+  // modale PIN/modification directement sur la réservation visée.
+  useEffect(() => {
+    if (!pendingEditReservationId) return;
+    const r = reservations.find((x) => x.id === pendingEditReservationId && x.type === "Nuit");
+    if (!r) return;
+    flowRef.current?.openPinModal(r);
+    setPendingEditReservationId(null);
+  }, [pendingEditReservationId, reservations, setPendingEditReservationId]);
 
   if (!space || !slotConfig) return null;
 

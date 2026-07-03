@@ -6,9 +6,12 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system";
+import { File } from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import { router } from "expo-router";
 import { supabase } from "@/lib/supabase";
+import { getVisitorSession } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
 import type { SouvenirPhoto } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
@@ -101,6 +104,18 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
 
   useEffect(() => { loadPhotos(); }, [loadPhotos]);
 
+  // Pré-remplit prénom/nom depuis la session visiteur enregistrée (Mon
+  // compte) à l'ouverture du formulaire d'upload — reste modifiable (ex:
+  // photo postée pour quelqu'un d'autre). Le PIN n'est jamais pré-rempli.
+  async function prefillFromSession() {
+    if (isAdmin) return;
+    const s = await getVisitorSession();
+    if (s) {
+      setUpPrenom(s.prenom);
+      setUpNom(s.nom);
+    }
+  }
+
   // ── Image picker ───────────────────────────────────────────────────────────
   async function pickFromGallery() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -116,6 +131,7 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
     if (!result.canceled && result.assets[0]) {
       setUploadPreview(result.assets[0].uri);
       setUploadUri(result.assets[0].uri);
+      await prefillFromSession();
       setShowUpload(true);
     }
   }
@@ -133,6 +149,7 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
     if (!result.canceled && result.assets[0]) {
       setUploadPreview(result.assets[0].uri);
       setUploadUri(result.assets[0].uri);
+      await prefillFromSession();
       setShowUpload(true);
     }
   }
@@ -166,12 +183,14 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
       const storagePath = `${spaceId}/${filename}`;
 
       // 3. Upload to Storage
-      const response = await fetch(compressed.uri);
-      const blob = await response.blob();
+      // fetch(localUri).blob() est peu fiable sur expo-file-system v19 (échoue
+      // souvent en "Network request failed") — on lit le fichier local
+      // directement via la nouvelle API File, sans passer par le réseau.
+      const fileData = await new File(compressed.uri).arrayBuffer();
 
       const { error: storageErr } = await supabase.storage
         .from("souvenirs")
-        .upload(storagePath, blob, { contentType: "image/jpeg", cacheControl: "3600" });
+        .upload(storagePath, fileData, { contentType: "image/jpeg", cacheControl: "3600" });
 
       if (storageErr) throw storageErr;
 
@@ -284,6 +303,17 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
     setDeleteTarget(null);
     showToast("Photo supprimée ✓");
     setDeleting(false);
+  }
+
+  // ── Voir l'original ────────────────────────────────────────────────────────
+  function goToOrigin(photo: SouvenirPhoto & { url: string }) {
+    if (!photo.source_type || !photo.source_id) return;
+    setLightbox(null);
+    if (photo.source_type === "news") {
+      router.push(`/(visitor)/news?focusEntryId=${photo.source_id}` as any);
+    } else {
+      router.push(`/(visitor)/soutien?focusMessageId=${photo.source_id}` as any);
+    }
   }
 
   function checkDeletePin() {
@@ -435,6 +465,14 @@ export default function SouvenirsGallery({ spaceId, C, isAdmin }: Props) {
                   >
                     <Text style={styles.lbBtnText}>⬇️ Partager</Text>
                   </TouchableOpacity>
+                  {lightbox.source_type && lightbox.source_id && (
+                    <TouchableOpacity
+                      style={[styles.lbBtn, { backgroundColor: "rgba(255,255,255,0.12)", borderWidth: 1, borderColor: "rgba(255,255,255,0.25)" }]}
+                      onPress={() => goToOrigin(lightbox)}
+                    >
+                      <Text style={styles.lbBtnText}>↩️ Voir l'origine</Text>
+                    </TouchableOpacity>
+                  )}
                   {(isAdmin || lightbox.uploaded_by_pin !== "ADMIN") && (
                     <TouchableOpacity
                       style={[styles.lbBtn, { backgroundColor: "rgba(233,69,96,0.2)", borderWidth: 1, borderColor: "rgba(233,69,96,0.4)" }]}
@@ -644,7 +682,7 @@ const styles = StyleSheet.create({
   lightboxCaption: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 16, color: "#fff", marginBottom: 6 },
   lightboxAuthor: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "rgba(255,255,255,0.85)" },
   lightboxDate: { fontFamily: "DM_Sans_400Regular", fontSize: 11, color: "rgba(255,255,255,0.55)", marginTop: 2, marginBottom: 14 },
-  lightboxBtns: { flexDirection: "row", gap: 10 },
+  lightboxBtns: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 10 },
   lbBtn: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 16 },
   lbBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 13, color: "#fff" },
   lightboxClose: { position: "absolute", top: 52, right: 16, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center" },

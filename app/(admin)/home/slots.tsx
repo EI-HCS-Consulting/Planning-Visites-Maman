@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useSpace } from "@/lib/SpaceContext";
 import { supabase } from "@/lib/supabase";
-import { getSlotOccupancy, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
+import { getSlotOccupancy, getNightReservation, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 import SpaceHeader from "@/components/SpaceHeader";
 import AdminAddReservation, { type AdminAddReservationHandle } from "@/components/AdminAddReservation";
@@ -94,6 +94,43 @@ export default function AdminSlotsScreen() {
           onAdd={(slot) => addRef.current?.open(iso, slot, "Visite")}
           onDelete={handleDeleteResa}
         />
+
+        {slotConfig.night_enabled && (() => {
+          const nightResa = getNightReservation(reservations, iso);
+          return (
+            <View style={[styles.slotCard, { backgroundColor: C.card, borderColor: nightResa ? "rgba(233,69,96,0.3)" : C.border }]}>
+              <View style={styles.slotHeader}>
+                <Text style={[styles.slotTime, { color: C.gold }]}>🌙 Nuitée</Text>
+                <Text style={[styles.slotCount, { color: C.muted }]}>18h → 11h</Text>
+                {!nightResa && (
+                  <TouchableOpacity
+                    style={[styles.addResaBtn, { backgroundColor: C.accent }]}
+                    onPress={() => addRef.current?.open(iso, "18:00", "Nuit")}
+                  >
+                    <Text style={styles.addResaBtnText}>+ Ajouter</Text>
+                  </TouchableOpacity>
+                )}
+                {nightResa && <Text style={[styles.fullTag, { color: C.danger }]}>Occupée</Text>}
+              </View>
+              {!nightResa ? (
+                <Text style={[styles.slotEmpty, { color: C.muted }]}>Aucun visiteur inscrit</Text>
+              ) : (
+                <View style={[styles.resaRow, { borderColor: C.border }]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.resaName, { color: C.success }]}>● {nightResa.prenom} {nightResa.nom}</Text>
+                    {nightResa.telephone ? <Text style={[styles.resaTel, { color: C.muted }]}>{nightResa.telephone}</Text> : null}
+                  </View>
+                  <TouchableOpacity
+                    style={[styles.deleteResaBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
+                    onPress={() => handleDeleteResa(nightResa)}
+                  >
+                    <Text style={{ color: "#e94560", fontSize: 13 }}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        })()}
       </ScrollView>
 
       <AdminAddReservation

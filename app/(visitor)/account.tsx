@@ -1,21 +1,37 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator, Image, Alert,
+  StyleSheet, ActivityIndicator, Image, Alert, Modal,
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import { themes } from "@/lib/themes";
+import { supabase } from "@/lib/supabase";
 import { getVisitorSession, saveVisitorSession, clearVisitorSession } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
+import type { Reservation, SouvenirPhoto, NewsEntry, SupportMessage, Task } from "@/lib/types";
+
+function souvenirUrl(spaceId: string, filename: string) {
+  const { data } = supabase.storage.from("souvenirs").getPublicUrl(`${spaceId}/${filename}`);
+  return data.publicUrl;
+}
+
+function supportPhotoUrl(spaceId: string, filename: string) {
+  const { data } = supabase.storage.from("support-photos").getPublicUrl(`${spaceId}/${filename}`);
+  return data.publicUrl;
+}
+
+const CAT_ICONS: Record<Task["category"], string> = {
+  repas: "🍽️", affaires: "🧳", courses: "🛒", autre: "📌",
+};
 
 // Onglet "Compte" côté visiteur — juste ses propres infos (pas de bouton
 // Paramètres, contrairement à la version admin). Prénom/Nom/Email/PIN ne
 // servent qu'à pré-remplir les futurs formulaires de réservation ; le PIN
 // reste toujours ressaisi à la main pour confirmer une action sensible.
 export default function VisitorAccountScreen() {
-  const { space, token } = useVisitorSpace();
+  const { space, token, setSelectedDay, setPendingEditReservationId } = useVisitorSpace();
   const router = useRouter();
   const C = themes[space?.theme ?? "blue"];
 
@@ -24,14 +40,54 @@ export default function VisitorAccountScreen() {
   const [nom, setNom] = useState("");
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
+  const [pinRevealed, setPinRevealed] = useState(false);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
+
+  // Vue centralisée "Mes contributions" — tout ce que le visiteur a saisi
+  // dans l'App, regroupé ici pour qu'il n'ait pas besoin de naviguer
+  // ailleurs pour le retrouver. Le rapprochement se fait par prénom+nom
+  // (pas d'identifiant de compte dans cette App), donc figé au moment du
+  // chargement de la page plutôt que recalculé à chaque frappe.
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [myReservations, setMyReservations] = useState<Reservation[]>([]);
+  const [mySouvenirs, setMySouvenirs] = useState<(SouvenirPhoto & { url: string })[]>([]);
+  const [myNews, setMyNews] = useState<NewsEntry[]>([]);
+  const [myMessages, setMyMessages] = useState<SupportMessage[]>([]);
+  const [myTasks, setMyTasks] = useState<Task[]>([]);
+
+  // Lightbox plein écran pour "Mes souvenirs" — index dans mySouvenirs, ou
+  // null si fermé.
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(""), 2800);
   }
+
+  const loadActivity = useCallback(async (spaceId: string, p: string, n: string) => {
+    if (!p.trim() || !n.trim()) return;
+    setActivityLoading(true);
+    const [resv, souv, news, msgs, tasks] = await Promise.all([
+      supabase.from("reservations").select("*").eq("space_id", spaceId)
+        .ilike("prenom", p.trim()).ilike("nom", n.trim()).order("date", { ascending: false }),
+      supabase.from("souvenirs").select("*").eq("space_id", spaceId)
+        .ilike("uploaded_by_prenom", p.trim()).ilike("uploaded_by_nom", n.trim()).order("created_at", { ascending: false }),
+      supabase.from("news_entries").select("*").eq("space_id", spaceId)
+        .ilike("author_prenom", p.trim()).ilike("author_nom", n.trim()).order("created_at", { ascending: false }),
+      supabase.from("support_messages").select("*").eq("space_id", spaceId)
+        .ilike("author_prenom", p.trim()).ilike("author_nom", n.trim()).order("created_at", { ascending: false }),
+      supabase.from("tasks").select("*").eq("space_id", spaceId)
+        .ilike("claimed_by_prenom", p.trim()).ilike("claimed_by_nom", n.trim()).order("created_at", { ascending: false }),
+    ]);
+    setMyReservations(resv.data || []);
+    setMySouvenirs((souv.data || []).map((s: SouvenirPhoto) => ({ ...s, url: souvenirUrl(spaceId, s.filename) })));
+    setMyNews(news.data || []);
+    setMyMessages(msgs.data || []);
+    setMyTasks(tasks.data || []);
+    setActivityLoading(false);
+  }, []);
 
   useEffect(() => {
     getVisitorSession().then((s) => {
@@ -41,10 +97,11 @@ export default function VisitorAccountScreen() {
         setEmail(s.email);
         setPin(s.pin);
         setPhotoUri(s.localPhotoUri);
+        if (space) loadActivity(space.id, s.prenom, s.nom);
       }
       setLoading(false);
     });
-  }, []);
+  }, [space, loadActivity]);
 
   async function handlePickPhoto() {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -76,6 +133,22 @@ export default function VisitorAccountScreen() {
     });
     setSaving(false);
     showToast("Enregistré ✓");
+    loadActivity(space.id, prenom, nom);
+  }
+
+  // Ouvre la réservation visée sur l'écran Créneaux (Visite) ou Nuitées
+  // (Nuit) avec la modale PIN/modification déjà ouverte — transmis via le
+  // contexte (pendingEditReservationId), pas un query param, pour la même
+  // raison que pendingBookingSlot : ça ne survit pas à la navigation Tabs >
+  // home Stack.
+  function handleOpenReservation(r: Reservation) {
+    setPendingEditReservationId(r.id);
+    if (r.type === "Nuit") {
+      router.push("/(visitor)/home/nights" as any);
+    } else {
+      setSelectedDay(new Date(r.date + "T12:00:00"));
+      router.push("/(visitor)/home/slots" as any);
+    }
   }
 
   function handleSwitchSpace() {
@@ -153,13 +226,20 @@ export default function VisitorAccountScreen() {
           />
         </View>
 
-        <Text style={[styles.sectionTitle, { color: C.gold }]}>Mon code PIN</Text>
+        <View style={styles.sectionTitleRow}>
+          <Text style={[styles.sectionTitle, { color: C.gold, marginBottom: 0 }]}>Mon code PIN</Text>
+          <TouchableOpacity onPress={() => setPinRevealed((v) => !v)} style={styles.revealBtn}>
+            <Text style={[styles.revealBtnText, { color: C.accent }]}>
+              {pinRevealed ? "🙈 Masquer" : "👁 Afficher"}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
           <Text style={[styles.cardDesc, { color: C.muted }]}>
             Pour t'en souvenir — il te sera toujours redemandé pour valider une réservation,
             la modifier, l'annuler ou supprimer une photo.
           </Text>
-          <PinPad value={pin} onChange={setPin} theme={C} />
+          <PinPad value={pin} onChange={setPin} theme={C} reveal={pinRevealed} />
         </View>
 
         <TouchableOpacity
@@ -173,6 +253,119 @@ export default function VisitorAccountScreen() {
           }
         </TouchableOpacity>
 
+        <Text style={[styles.sectionTitle, { color: C.gold }]}>Mes contributions</Text>
+        {activityLoading ? (
+          <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+        ) : !prenom.trim() || !nom.trim() ? (
+          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
+              Renseigne ton prénom et ton nom ci-dessus pour retrouver ici tout ce que tu as
+              saisi dans l'App.
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📅 Mes réservations ({myReservations.length})</Text>
+              {myReservations.length === 0 ? (
+                <Text style={[styles.activityEmpty, { color: C.muted }]}>Aucune réservation pour le moment.</Text>
+              ) : myReservations.map((r) => (
+                <TouchableOpacity
+                  key={r.id}
+                  style={styles.activityRow}
+                  onPress={() => handleOpenReservation(r)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.activityRowText, { color: C.text, flex: 1 }]}>
+                    {r.type === "Nuit" ? "🌙" : "☀️"} {new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} · {r.creneau}
+                  </Text>
+                  <Text style={[styles.activityChevron, { color: C.muted }]}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📷 Mes souvenirs ({mySouvenirs.length})</Text>
+              {mySouvenirs.length === 0 ? (
+                <Text style={[styles.activityEmpty, { color: C.muted }]}>Aucune photo envoyée pour le moment.</Text>
+              ) : (
+                <View style={styles.activityThumbRow}>
+                  {mySouvenirs.map((s, idx) => (
+                    <TouchableOpacity key={s.id} onPress={() => setLightboxIndex(idx)} activeOpacity={0.8}>
+                      <Image source={{ uri: s.url }} style={styles.activityThumb} resizeMode="cover" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📰 Mes nouvelles ({myNews.length})</Text>
+              {myNews.length === 0 ? (
+                <Text style={[styles.activityEmpty, { color: C.muted }]}>Aucune nouvelle publiée pour le moment.</Text>
+              ) : myNews.map((entry) => (
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.activityRow}
+                  onPress={() => router.push(`/(visitor)/news?focusEntryId=${entry.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.activityRowText, { color: C.text, flex: 1 }]} numberOfLines={2}>
+                    {new Date(entry.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} — {entry.content}
+                  </Text>
+                  <Text style={[styles.activityChevron, { color: C.muted }]}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>💛 Mes messages de soutien ({myMessages.length})</Text>
+              {myMessages.length === 0 ? (
+                <Text style={[styles.activityEmpty, { color: C.muted }]}>Aucun message envoyé pour le moment.</Text>
+              ) : myMessages.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.activityRow, { alignItems: "flex-start" }]}
+                  onPress={() => router.push(`/(visitor)/soutien?focusMessageId=${m.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  {m.photo && (
+                    <Image source={{ uri: supportPhotoUrl(space.id, m.photo) }} style={styles.activityMsgThumb} resizeMode="cover" />
+                  )}
+                  <Text style={[styles.activityRowText, { color: C.text, flex: 1 }]} numberOfLines={2}>
+                    {new Date(m.created_at).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} — {m.message}
+                  </Text>
+                  <Text style={[styles.activityChevron, { color: C.muted }]}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>🤝 Besoins dont je m'occupe ({myTasks.length})</Text>
+              {myTasks.length === 0 ? (
+                <Text style={[styles.activityEmpty, { color: C.muted }]}>Tu n'as pris en charge aucun besoin pour le moment.</Text>
+              ) : myTasks.map((t) => (
+                <TouchableOpacity
+                  key={t.id}
+                  style={styles.activityRow}
+                  onPress={() => router.push(`/(visitor)/entraide?focusTaskId=${t.id}` as any)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.activityRowText, { color: C.text, flex: 1 }]} numberOfLines={1}>
+                    {CAT_ICONS[t.category]} {t.title}
+                  </Text>
+                  <View style={[styles.activityStatusBadge, { borderColor: t.status === "fait" ? C.success : C.orange }]}>
+                    <Text style={[styles.activityStatusText, { color: t.status === "fait" ? C.success : C.orange }]}>
+                      {t.status === "fait" ? "✓ Fait" : "⏳ En attente"}
+                    </Text>
+                  </View>
+                  <Text style={[styles.activityChevron, { color: C.muted }]}>›</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </>
+        )}
+
         <TouchableOpacity style={styles.switchLink} onPress={handleSwitchSpace}>
           <Text style={[styles.switchLinkText, { color: C.muted }]}>Suivre un autre espace</Text>
         </TouchableOpacity>
@@ -183,6 +376,47 @@ export default function VisitorAccountScreen() {
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
+
+      <Modal visible={lightboxIndex !== null} transparent animationType="fade" onRequestClose={() => setLightboxIndex(null)}>
+        <View style={styles.lightboxOverlay}>
+          <TouchableOpacity style={styles.lightboxClose} onPress={() => setLightboxIndex(null)}>
+            <Text style={styles.lightboxCloseText}>✕</Text>
+          </TouchableOpacity>
+
+          {lightboxIndex !== null && mySouvenirs[lightboxIndex] && (
+            <>
+              <Image source={{ uri: mySouvenirs[lightboxIndex].url }} style={styles.lightboxImg} resizeMode="contain" />
+
+              <View style={styles.lightboxNavRow}>
+                <TouchableOpacity
+                  disabled={lightboxIndex === 0}
+                  onPress={() => setLightboxIndex((i) => (i !== null ? Math.max(i - 1, 0) : i))}
+                  style={[styles.lightboxNavBtn, lightboxIndex === 0 && { opacity: 0.3 }]}
+                >
+                  <Text style={styles.lightboxNavText}>‹ Précédent</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  disabled={lightboxIndex === mySouvenirs.length - 1}
+                  onPress={() => setLightboxIndex((i) => (i !== null ? Math.min(i + 1, mySouvenirs.length - 1) : i))}
+                  style={[styles.lightboxNavBtn, lightboxIndex === mySouvenirs.length - 1 && { opacity: 0.3 }]}
+                >
+                  <Text style={styles.lightboxNavText}>Suivant ›</Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.lightboxLink, { backgroundColor: C.accent }]}
+                onPress={() => {
+                  setLightboxIndex(null);
+                  router.push("/(visitor)/souvenirs" as any);
+                }}
+              >
+                <Text style={styles.lightboxLinkText}>📷 Voir dans Souvenirs</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -200,9 +434,23 @@ const styles = StyleSheet.create({
   photoHint: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
 
   sectionTitle: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10, marginTop: 8 },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 10 },
+  revealBtn: { paddingVertical: 2, paddingHorizontal: 4 },
+  revealBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
   card: { borderWidth: 1, borderRadius: 14, padding: 16, marginBottom: 4, gap: 10 },
   cardDesc: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 19, marginBottom: 4 },
   input: { borderWidth: 1, borderRadius: 10, padding: 13, fontFamily: "DM_Sans_400Regular", fontSize: 15 },
+
+  activityGroupTitle: { fontFamily: "DM_Sans_700Bold", fontSize: 13, marginBottom: 4 },
+  activityEmpty: { fontFamily: "DM_Sans_400Regular", fontSize: 13 },
+  activityRow: { paddingVertical: 6, flexDirection: "row", alignItems: "center", gap: 8 },
+  activityRowText: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 19 },
+  activityThumbRow: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
+  activityThumb: { width: 64, height: 64, borderRadius: 8 },
+  activityMsgThumb: { width: 44, height: 44, borderRadius: 8 },
+  activityStatusBadge: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
+  activityStatusText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 10 },
+  activityChevron: { fontFamily: "DM_Sans_700Bold", fontSize: 16 },
 
   saveBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 24 },
   saveBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
@@ -212,4 +460,14 @@ const styles = StyleSheet.create({
 
   toast: { position: "absolute", bottom: 24, alignSelf: "center", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
   toastText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "#fff" },
+
+  lightboxOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.92)", alignItems: "center", justifyContent: "center", padding: 16 },
+  lightboxClose: { position: "absolute", top: 52, right: 20, width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.15)", alignItems: "center", justifyContent: "center", zIndex: 1 },
+  lightboxCloseText: { color: "#fff", fontSize: 16, fontFamily: "DM_Sans_700Bold" },
+  lightboxImg: { width: "100%", height: "65%" },
+  lightboxNavRow: { flexDirection: "row", gap: 16, marginTop: 16 },
+  lightboxNavBtn: { paddingVertical: 8, paddingHorizontal: 14 },
+  lightboxNavText: { color: "#fff", fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
+  lightboxLink: { borderRadius: 10, paddingVertical: 12, paddingHorizontal: 22, marginTop: 20 },
+  lightboxLinkText: { fontFamily: "DM_Sans_700Bold", fontSize: 14, color: "#fff" },
 });

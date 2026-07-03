@@ -18,6 +18,7 @@ interface SpaceContextValue {
   setPendingBookingSlot: (slot: string | null) => void;
   refreshReservations: () => Promise<void>;
   refreshSpace: () => Promise<void>;
+  refreshSlotConfig: () => Promise<void>;
 }
 
 const SpaceContext = createContext<SpaceContextValue>({
@@ -33,6 +34,7 @@ const SpaceContext = createContext<SpaceContextValue>({
   setPendingBookingSlot: () => {},
   refreshReservations: async () => {},
   refreshSpace: async () => {},
+  refreshSlotConfig: async () => {},
 });
 
 export function useSpace() {
@@ -96,6 +98,14 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
     await fetchSpace();
   }, [fetchSpace]);
 
+  // Lightweight re-fetch of slotConfig only (no loading spinner) — called by
+  // settings after saving slot rules so the context updates immediately.
+  const refreshSlotConfig = useCallback(async () => {
+    if (!space?.id) return;
+    const { data } = await supabase.from("slot_config").select("*").eq("space_id", space.id).single();
+    if (data) { setSlotConfig(data); setSlots(generateSlots(data)); }
+  }, [space?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const refreshReservations = useCallback(async () => {
     if (!space) return;
     const { data } = await supabase
@@ -120,25 +130,42 @@ export function AdminSpaceProvider({ adminId, children }: { adminId: string; chi
       )
       .subscribe();
 
-    // Space realtime — reflect theme/photo changes immediately
+    // Space realtime — reflect any field change immediately (re-fetch to get
+    // the full row; payload.new only includes changed columns without REPLICA
+    // IDENTITY FULL, so direct assignment would drop unmodified fields).
     const ch2 = supabase
       .channel(`space-admin:${space.id}`)
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "patient_spaces", filter: `id=eq.${space.id}` },
-        (payload) => { setSpace(payload.new as PatientSpace); },
+        () => { fetchSpace(); },
+      )
+      .subscribe();
+
+    // slot_config realtime — update slots immediately when admin saves rules.
+    const spaceId = space.id;
+    const ch3 = supabase
+      .channel(`slot-config-admin:${spaceId}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "slot_config", filter: `space_id=eq.${spaceId}` },
+        async () => {
+          const { data } = await supabase.from("slot_config").select("*").eq("space_id", spaceId).single();
+          if (data) { setSlotConfig(data); setSlots(generateSlots(data)); }
+        },
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(ch1);
       supabase.removeChannel(ch2);
+      supabase.removeChannel(ch3);
     };
   }, [space?.id, refreshReservations]);
 
   return (
     <SpaceContext.Provider
-      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, selectedDay, setSelectedDay, pendingBookingSlot, setPendingBookingSlot, refreshReservations, refreshSpace }}
+      value={{ space, slotConfig, slots, reservations, loading, hasSpace: !!space, selectedDay, setSelectedDay, pendingBookingSlot, setPendingBookingSlot, refreshReservations, refreshSpace, refreshSlotConfig }}
     >
       {children}
     </SpaceContext.Provider>

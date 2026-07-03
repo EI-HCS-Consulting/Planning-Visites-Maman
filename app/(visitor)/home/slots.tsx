@@ -4,16 +4,17 @@ import { useVisitorSpace } from "@/lib/VisitorContext";
 import { getVisitorSession } from "@/lib/visitorSession";
 import SpaceHeader from "@/components/SpaceHeader";
 import BookingFlow, { type BookingFlowHandle } from "@/components/BookingFlow";
-import { getSlotOccupancy, isSlotPast, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
+import { getSlotOccupancy, getNightReservation, isSlotPast, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 
 // Recentré sur les créneaux "Visite" uniquement depuis le Lot 3 — la nuitée
 // a son propre écran (home/nights.tsx). La logique de réservation/PIN/édition
 // elle-même vit dans components/BookingFlow.tsx, partagée entre les deux.
 export default function SlotsScreen() {
-  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token, pendingBookingSlot, setPendingBookingSlot } = useVisitorSpace();
+  const { space, slotConfig, slots, reservations, selectedDay, setSelectedDay, refreshReservations, token, pendingBookingSlot, setPendingBookingSlot, pendingEditReservationId, setPendingEditReservationId } = useVisitorSpace();
   const C = themes[space?.theme ?? "blue"];
   const flowRef = useRef<BookingFlowHandle>(null);
+  const nightFlowRef = useRef<BookingFlowHandle>(null);
 
   const startDate = space ? new Date(space.start_date + "T00:00:00") : new Date();
 
@@ -28,6 +29,18 @@ export default function SlotsScreen() {
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Arrivée via "Mon compte" > "Mes réservations" : rouvre la modale
+  // PIN/modification directement sur la réservation visée, une fois les
+  // réservations chargées dans le contexte.
+  useEffect(() => {
+    if (!pendingEditReservationId) return;
+    const r = reservations.find((x) => x.id === pendingEditReservationId);
+    if (!r) return;
+    if (r.type === "Nuit") nightFlowRef.current?.openPinModal(r);
+    else flowRef.current?.openPinModal(r);
+    setPendingEditReservationId(null);
+  }, [pendingEditReservationId, reservations, setPendingEditReservationId]);
 
   if (!space || !slotConfig) return null;
 
@@ -104,6 +117,49 @@ export default function SlotsScreen() {
             </View>
           );
         })}
+
+        {/* Nuitée du jour — ajoutée à la fin de la liste des créneaux, même
+            écran et même interaction que les créneaux "Visite" (Lot demandé
+            par l'utilisateur). Réservation/édition gérées par une seconde
+            instance de BookingFlow en type="Nuit" (la nuitée a sa propre
+            logique de créneau/horaire — voir home/nights.tsx). */}
+        {slotConfig.night_enabled && (() => {
+          const nightResa = getNightReservation(reservations, iso);
+          return (
+            <View
+              style={[styles.slotCard, { backgroundColor: C.card, borderColor: nightResa ? "rgba(233,69,96,0.3)" : C.border }]}
+            >
+              <View style={styles.slotLeft}>
+                <Text style={[styles.slotTime, { color: C.gold }]}>🌙 Nuitée</Text>
+                <Text style={[styles.slotCount, { color: C.muted }]}>18h → 11h</Text>
+                {!nightResa
+                  ? <Text style={[styles.slotEmpty, { color: C.muted }]}>——</Text>
+                  : (
+                    <View style={styles.visitorRow}>
+                      <Text style={[styles.visitorName, { color: C.success }]}>● {nightResa.prenom} {nightResa.nom}</Text>
+                      <TouchableOpacity onPress={() => nightFlowRef.current?.openPinModal(nightResa)} style={[styles.editBadge, { backgroundColor: C.orange }]}>
+                        <Text style={styles.editBadgeText}>✏️</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )
+                }
+              </View>
+              {!nightResa ? (
+                <TouchableOpacity
+                  style={[styles.reserveBtn, { backgroundColor: C.accent }]}
+                  onPress={() => nightFlowRef.current?.openBooking(iso, "18:00")}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.reserveBtnText}>+ Réserver</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={[styles.fullBadge, { borderColor: C.border }]}>
+                  <Text style={[styles.fullBadgeText, { color: C.muted }]}>Complet</Text>
+                </View>
+              )}
+            </View>
+          );
+        })()}
       </ScrollView>
 
       <BookingFlow
@@ -112,6 +168,20 @@ export default function SlotsScreen() {
         space={space}
         slotConfig={slotConfig}
         slots={slots}
+        reservations={reservations}
+        startDate={startDate}
+        token={token}
+        refreshReservations={refreshReservations}
+        homeCalendarPath="/(visitor)/home/calendar"
+        C={C}
+      />
+
+      <BookingFlow
+        ref={nightFlowRef}
+        type="Nuit"
+        space={space}
+        slotConfig={slotConfig}
+        slots={[]}
         reservations={reservations}
         startDate={startDate}
         token={token}

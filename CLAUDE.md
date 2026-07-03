@@ -68,6 +68,40 @@ App.jsx            → MVP web de référence (logique à porter en RN)
 13. EAS Build → APK signé
 14. Fiche Play Store + soumission
 
+## Commande handoff
+Quand je dis "génère un handoff", tu dois :
+1. Remplir le template ci-dessous avec l'état exact de la session en cours
+2. Écrire le résultat dans un fichier `handoff.md` à la racine du projet
+3. Confirmer que le fichier est écrit et prêt
+
+### Template handoff
+```markdown
+# Handoff — AvecToi
+_Généré le : {date et heure}_
+
+## 1. Objectif de la session
+Ce qu'on cherchait à accomplir.
+État "done" : comment on saurait que c'est terminé.
+
+## 2. État actuel
+Ce qui fonctionne déjà.
+Ce qui est en cours (non terminé).
+Dernière action effectuée avant le handoff.
+
+## 3. Fichiers concernés
+Chemins exacts des fichiers touchés + rôle de chacun.
+Ex : src/components/Calendar.tsx → composant calendrier visiteur
+
+## 4. Ce qui a échoué
+Pistes déjà tentées qui n'ont PAS marché, et pourquoi.
+⚠️ Section critique : évite de re-tenter les impasses.
+
+## 5. Prochaine étape
+La toute prochaine action concrète à effectuer.
+Être directif : commande, fichier, ou tâche précise en premier.
+Hypothèses à tester, par ordre de priorité.
+```
+
 ## Références
 - PRD complet : PRD_AvecToi_v1_4.md (dans ce dossier)
 - Code source MVP : App.jsx (dans ce dossier)
