@@ -11,7 +11,8 @@ import { linkCalendarEvent, getLinkedCalendarEvent, unlinkCalendarEvent } from "
 import { supabase } from "@/lib/supabase";
 import { getVisitorSession, saveVisitorSession, sessionPinMatches } from "@/lib/visitorSession";
 import PinPad from "@/components/PinPad";
-import { getSlotOccupancy, getDaysInMonth, isSlotPast, isReservationDatePast, toISO, toFrLong, toFrShort } from "@/lib/slotUtils";
+import { getSlotOccupancy, getDaysInMonth, isSlotPast, isReservationDatePast, toISO, toFrLong, toFrShort, nightStartSlot, nightRangeLabel } from "@/lib/slotUtils";
+import { activeAddressParts, joinAddress } from "@/lib/address";
 import type { Reservation, SlotConfig, PatientSpace } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
 
@@ -47,15 +48,15 @@ interface ConfirmedBooking {
   slot: string;
 }
 
-function eventWindow(iso: string, slot: string, type: "Visite" | "Nuit", slotDurationMinutes: number) {
+function eventWindow(iso: string, slot: string, type: "Visite" | "Nuit", config: SlotConfig) {
   const startDate = new Date(`${iso}T${slot}:00`);
   let endDate: Date;
   if (type === "Nuit") {
     endDate = new Date(`${iso}T${slot}:00`);
     endDate.setDate(endDate.getDate() + 1);
-    endDate.setHours(11, 0, 0, 0);
+    endDate.setHours(config.night_end_hour ?? 8, 0, 0, 0);
   } else {
-    endDate = new Date(startDate.getTime() + slotDurationMinutes * 60 * 1000);
+    endDate = new Date(startDate.getTime() + config.slot_duration_minutes * 60 * 1000);
   }
   return { startDate, endDate };
 }
@@ -88,14 +89,16 @@ async function addToNativeCalendar(
     const target = await findTargetCalendar(preferredEmail);
     if (!target) return { ok: false, reason: "Aucun calendrier modifiable trouvé sur l'appareil." };
 
-    const { startDate, endDate } = eventWindow(iso, slot, type, config.slot_duration_minutes);
+    const { startDate, endDate } = eventWindow(iso, slot, type, config);
 
     const eventId = await ExpoCalendar.createEventAsync(target.id, {
       title: `${type === "Nuit" ? "Nuitée" : "Visite"} ${space.patient_firstname} ${space.patient_lastname}`,
       startDate,
       endDate,
-      location: `${space.hospital_name}${space.hospital_room ? " — " + space.hospital_room : ""}`,
-      notes: space.hospital_address,
+      location: space.home_care_mode
+        ? "Domicile"
+        : `${space.hospital_name}${space.hospital_room ? " — " + space.hospital_room : ""}`,
+      notes: joinAddress(activeAddressParts(space)) || undefined,
       alarms: [{ relativeOffset: -60 }],
     });
 
@@ -106,14 +109,14 @@ async function addToNativeCalendar(
 }
 
 async function updateLinkedCalendarEvent(
-  reservationId: string, iso: string, slot: string, type: "Visite" | "Nuit", slotDurationMinutes: number,
+  reservationId: string, iso: string, slot: string, type: "Visite" | "Nuit", config: SlotConfig,
 ): Promise<void> {
   try {
     const eventId = await getLinkedCalendarEvent(reservationId);
     if (!eventId) return;
     const { status } = await ExpoCalendar.requestCalendarPermissionsAsync();
     if (status !== "granted") return;
-    const { startDate, endDate } = eventWindow(iso, slot, type, slotDurationMinutes);
+    const { startDate, endDate } = eventWindow(iso, slot, type, config);
     await ExpoCalendar.updateEventAsync(eventId, { startDate, endDate });
   } catch {
     // Non-fatal — the reservation itself is already saved either way.
@@ -352,9 +355,9 @@ function BookingFlow(
     updateLinkedCalendarEvent(
       editModal.id,
       editDate,
-      editModal.type === "Nuit" ? "18:00" : (editSlot ?? editModal.creneau),
+      editModal.type === "Nuit" ? nightStartSlot(slotConfig) : (editSlot ?? editModal.creneau),
       editModal.type,
-      slotConfig.slot_duration_minutes,
+      slotConfig,
     );
 
     await updateLastActivity(space.id);
@@ -382,7 +385,7 @@ function BookingFlow(
   async function handleAddToCalendarFromPin() {
     if (!pinModal) return;
     const session = await getVisitorSession();
-    const slotForEvent = pinModal.type === "Nuit" ? "18:00" : pinModal.creneau;
+    const slotForEvent = pinModal.type === "Nuit" ? nightStartSlot(slotConfig) : pinModal.creneau;
     const result = await addToNativeCalendar(space, slotConfig, pinModal.date, slotForEvent, pinModal.type, session?.email || null);
     if (result.ok) {
       await linkCalendarEvent(pinModal.id, result.eventId);
@@ -407,7 +410,7 @@ function BookingFlow(
                   </Text>
                   <Text style={[styles.sheetSub, { color: C.muted }]}>
                     {bookingTarget && toFrLong(new Date(bookingTarget.iso + "T12:00:00"))} ·{" "}
-                    {type === "Nuit" ? "18h → 11h" : `${slotConfig.slot_duration_minutes} min max`}
+                    {type === "Nuit" ? nightRangeLabel(slotConfig) : `${slotConfig.slot_duration_minutes} min max`}
                   </Text>
 
                   <TextInput

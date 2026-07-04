@@ -45,9 +45,8 @@ export default function WelcomeScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.logoWrap}>
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoEmoji}>🤝</Text>
-        </View>
+        {/* eslint-disable-next-line @typescript-eslint/no-require-imports */}
+        <Image source={require("@/assets/icon.png")} style={styles.logo} resizeMode="contain" />
       </View>
 
       <Text style={styles.title}>AvecToi</Text>
@@ -93,18 +92,10 @@ const styles = StyleSheet.create({
   logoWrap: {
     marginBottom: 24,
   },
-  logoCircle: {
+  logo: {
     width: 120,
     height: 120,
-    borderRadius: 60,
-    backgroundColor: C.card,
-    borderWidth: 2,
-    borderColor: C.accent,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  logoEmoji: {
-    fontSize: 48,
+    borderRadius: 28,
   },
   title: {
     fontFamily: "PlayfairDisplay_700Bold",

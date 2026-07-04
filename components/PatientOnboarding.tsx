@@ -67,7 +67,6 @@ export default function PatientOnboarding() {
   const [hospitalSector, setHospitalSector] = useState("");
   const [hospitalRoom, setHospitalRoom] = useState("");
   const [hospitalAddress, setHospitalAddress] = useState("");
-  const [hospitalMapsUrl, setHospitalMapsUrl] = useState("");
   const [visitRules, setVisitRules] = useState("");
   const [theme, setTheme] = useState<ThemeKey>("blue");
   const [submitting, setSubmitting] = useState(false);
@@ -103,7 +102,7 @@ export default function PatientOnboarding() {
           hospital_sector: hospitalSector.trim() || null,
           hospital_room: hospitalRoom.trim(),
           hospital_address: hospitalAddress.trim(),
-          hospital_maps_url: hospitalMapsUrl.trim(),
+          hospital_maps_url: "",
           visit_rules: visitRules.trim(),
           theme,
           is_active: true,
@@ -207,15 +206,6 @@ export default function PatientOnboarding() {
             placeholderTextColor={C.muted}
             value={hospitalAddress}
             onChangeText={setHospitalAddress}
-          />
-          <TextInput
-            style={[styles.input, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-            placeholder="Lien Google Maps (optionnel)"
-            placeholderTextColor={C.muted}
-            value={hospitalMapsUrl}
-            onChangeText={setHospitalMapsUrl}
-            autoCapitalize="none"
-            keyboardType="url"
           />
         </View>
 

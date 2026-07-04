@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView,
-  StyleSheet, ActivityIndicator,
+  StyleSheet, ActivityIndicator, TextInput, Alert,
+  Modal, KeyboardAvoidingView, Platform, Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import * as ImageManipulator from "expo-image-manipulator";
+import { File } from "expo-file-system";
 import { useSpace } from "@/lib/SpaceContext";
 import { themes } from "@/lib/themes";
 import { supabase } from "@/lib/supabase";
 import PatientAvatar from "@/components/PatientAvatar";
+import PinPad from "@/components/PinPad";
 import type { Reservation, NewsEntry, SupportMessage, Task } from "@/lib/types";
 
 const CAT_ICONS: Record<Task["category"], string> = {
@@ -16,6 +21,8 @@ const CAT_ICONS: Record<Task["category"], string> = {
   courses: "🛒",
   autre: "💡",
 };
+
+const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.85;
 
 export default function AdminAccountScreen() {
   const router = useRouter();
@@ -27,6 +34,182 @@ export default function AdminAccountScreen() {
   const [news, setNews] = useState<NewsEntry[]>([]);
   const [messages, setMessages] = useState<SupportMessage[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+
+  // ── Profil admin (distinct du patient — auth.users + user_metadata) ────────
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [adminUserId, setAdminUserId] = useState<string | null>(null);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminFirstname, setAdminFirstname] = useState("");
+  const [adminLastname, setAdminLastname] = useState("");
+  const [adminPin, setAdminPin] = useState("");
+  const [adminPhotoUrl, setAdminPhotoUrl] = useState<string | null>(null);
+  const [pinRevealed, setPinRevealed] = useState(false);
+
+  const [editProfileModal, setEditProfileModal] = useState(false);
+  const [tempFirstname, setTempFirstname] = useState("");
+  const [tempLastname, setTempLastname] = useState("");
+  const [tempPin, setTempPin] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
+
+  const [changePasswordModal, setChangePasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const [toast, setToast] = useState("");
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 2800);
+  }
+
+  useEffect(() => {
+    loadAdminProfile();
+  }, []);
+
+  async function loadAdminProfile() {
+    setProfileLoading(true);
+    const { data } = await supabase.auth.getUser();
+    const user = data.user;
+    if (user) {
+      setAdminUserId(user.id);
+      setAdminEmail(user.email ?? "");
+      setAdminFirstname(user.user_metadata?.firstname ?? "");
+      setAdminLastname(user.user_metadata?.lastname ?? "");
+      setAdminPin(user.user_metadata?.pin ?? "");
+      setAdminPhotoUrl(user.user_metadata?.photo_url ?? null);
+    }
+    setProfileLoading(false);
+  }
+
+  function handleOpenEditProfile() {
+    setTempFirstname(adminFirstname);
+    setTempLastname(adminLastname);
+    setTempPin(adminPin);
+    setPinRevealed(false);
+    setEditProfileModal(true);
+  }
+
+  async function handleSaveProfile() {
+    setSavingProfile(true);
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        firstname: tempFirstname.trim(),
+        lastname: tempLastname.trim(),
+        pin: tempPin,
+      },
+    });
+    setSavingProfile(false);
+    if (error) {
+      showToast("Erreur lors de la sauvegarde.");
+      return;
+    }
+    setAdminFirstname(tempFirstname.trim());
+    setAdminLastname(tempLastname.trim());
+    setAdminPin(tempPin);
+    showToast("Profil mis à jour ✓");
+    setEditProfileModal(false);
+  }
+
+  async function handleAdminPhotoUpload() {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) {
+      Alert.alert("Permission refusée", "Autorise l'accès à la galerie dans les paramètres.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      quality: 1,
+      allowsEditing: true,
+      aspect: [1, 1],
+    });
+
+    if (result.canceled || !result.assets[0] || !adminUserId) return;
+
+    setPhotoUploading(true);
+    try {
+      const compressed = await ImageManipulator.manipulateAsync(
+        result.assets[0].uri,
+        [{ resize: { width: 400 } }],
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG },
+      );
+
+      const fileData = await new File(compressed.uri).arrayBuffer();
+      const storagePath = `${adminUserId}/photo.jpg`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("admin-photos")
+        .upload(storagePath, fileData, {
+          contentType: "image/jpeg",
+          cacheControl: "0",
+          upsert: true,
+        });
+
+      if (uploadErr) throw uploadErr;
+
+      const { data: urlData } = supabase.storage
+        .from("admin-photos")
+        .getPublicUrl(storagePath);
+
+      const photoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+
+      const { error: updateErr } = await supabase.auth.updateUser({
+        data: { photo_url: photoUrl },
+      });
+      if (updateErr) throw updateErr;
+
+      setAdminPhotoUrl(photoUrl);
+      showToast("Photo mise à jour ✓");
+    } catch (e: any) {
+      showToast("Erreur : " + (e?.message ?? "inconnue"));
+    }
+    setPhotoUploading(false);
+  }
+
+  function handleRemoveAdminPhoto() {
+    if (!adminPhotoUrl || !adminUserId) return;
+    Alert.alert("Supprimer la photo ?", "Ta photo de profil sera retirée de l'app.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Supprimer",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.storage.from("admin-photos").remove([`${adminUserId}/photo.jpg`]);
+          await supabase.auth.updateUser({ data: { photo_url: null } });
+          setAdminPhotoUrl(null);
+          showToast("Photo supprimée ✓");
+        },
+      },
+    ]);
+  }
+
+  function handleOpenChangePassword() {
+    setNewPassword("");
+    setConfirmPassword("");
+    setChangePasswordModal(true);
+  }
+
+  async function handleChangePassword() {
+    if (newPassword.length < 6) {
+      showToast("Le mot de passe doit faire au moins 6 caractères.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showToast("Les deux mots de passe ne correspondent pas.");
+      return;
+    }
+    setSavingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    setSavingPassword(false);
+    if (error) {
+      showToast("Erreur : " + error.message);
+      return;
+    }
+    showToast("Mot de passe modifié ✓");
+    setChangePasswordModal(false);
+  }
 
   useEffect(() => {
     if (!space) return;
@@ -79,29 +262,50 @@ export default function AdminAccountScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
-        {hasSpace && space ? (
-          <>
-            {/* Bandeau patient */}
-            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+        {/* Bandeau profil admin — distinct du patient (déplacé dans Paramètres) */}
+        <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+          {profileLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+          ) : (
+            <>
               <View style={styles.patientRow}>
                 <PatientAvatar
-                  photoUrl={space.patient_photo_url}
-                  firstname={space.patient_firstname}
-                  lastname={space.patient_lastname}
+                  photoUrl={adminPhotoUrl}
+                  firstname={adminFirstname || "?"}
+                  lastname={adminLastname}
                   size={56}
                   C={C}
                 />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.patientName, { color: "#fff" }]}>
-                    {space.patient_firstname} {space.patient_lastname}
+                    {adminFirstname || adminLastname ? `${adminFirstname} ${adminLastname}`.trim() : "Complète ton profil"}
                   </Text>
-                  <Text style={[styles.patientSub, { color: C.muted }]}>
-                    {space.premium ? "✨ Espace premium" : "Espace gratuit"}
-                  </Text>
+                  {!!adminEmail && (
+                    <Text style={[styles.patientSub, { color: C.muted }]}>{adminEmail}</Text>
+                  )}
+                  {!!adminPin && (
+                    <Text style={[styles.patientSub, { color: C.muted }]}>
+                      PIN : {pinRevealed ? adminPin : "●".repeat(adminPin.length)}{" "}
+                      <Text onPress={() => setPinRevealed((v) => !v)} style={{ color: C.accent }}>
+                        {pinRevealed ? "🙈" : "👁"}
+                      </Text>
+                    </Text>
+                  )}
                 </View>
               </View>
-            </View>
+              <TouchableOpacity
+                style={[styles.editProfileBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border }]}
+                onPress={handleOpenEditProfile}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.editProfileBtnText, { color: C.muted }]}>✏️ Modifier mon profil</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
 
+        {hasSpace && space ? (
+          <>
             {/* Section Mes contributions */}
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Mes contributions</Text>
 
@@ -229,6 +433,159 @@ export default function AdminAccountScreen() {
           </View>
         )}
       </ScrollView>
+
+      {!!toast && (
+        <View style={[styles.toast, { backgroundColor: C.success }]}>
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      )}
+
+      {/* ── MODAL MODIFIER MON PROFIL ────────────────────────────────────── */}
+      <Modal visible={editProfileModal} transparent animationType="slide" onRequestClose={() => setEditProfileModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <View style={styles.overlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setEditProfileModal(false)}
+            />
+            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent, maxHeight: SHEET_MAX_HEIGHT }]}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[styles.sheetTitle, { color: "#fff" }]}>✏️ Modifier mon profil</Text>
+
+                <View style={styles.photoSection}>
+                  <PatientAvatar
+                    photoUrl={adminPhotoUrl}
+                    firstname={tempFirstname || "?"}
+                    lastname={tempLastname}
+                    size={72}
+                    C={C}
+                  />
+                  <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+                    <TouchableOpacity
+                      style={[styles.smallBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border }]}
+                      onPress={handleAdminPhotoUpload}
+                      disabled={photoUploading}
+                    >
+                      {photoUploading
+                        ? <ActivityIndicator color={C.muted} size="small" />
+                        : <Text style={[styles.smallBtnText, { color: C.muted }]}>📷 {adminPhotoUrl ? "Changer" : "Ajouter"} la photo</Text>
+                      }
+                    </TouchableOpacity>
+                    {!!adminPhotoUrl && (
+                      <TouchableOpacity
+                        style={[styles.smallBtn, { backgroundColor: "rgba(233,69,96,0.1)", borderColor: "rgba(233,69,96,0.3)" }]}
+                        onPress={handleRemoveAdminPhoto}
+                      >
+                        <Text style={[styles.smallBtnText, { color: "#e94560" }]}>Retirer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>Prénom / Nom</Text>
+                <TextInput
+                  style={[styles.sheetInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Prénom"
+                  placeholderTextColor={C.muted}
+                  value={tempFirstname}
+                  onChangeText={setTempFirstname}
+                  autoCapitalize="words"
+                />
+                <TextInput
+                  style={[styles.sheetInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Nom"
+                  placeholderTextColor={C.muted}
+                  value={tempLastname}
+                  onChangeText={setTempLastname}
+                  autoCapitalize="words"
+                />
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                <View style={styles.sectionTitleRow}>
+                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0, marginBottom: 0 }]}>Mon code PIN</Text>
+                  <TouchableOpacity onPress={() => setPinRevealed((v) => !v)} style={{ paddingVertical: 2, paddingHorizontal: 4 }}>
+                    <Text style={[styles.smallBtnText, { color: C.accent }]}>
+                      {pinRevealed ? "🙈 Masquer" : "👁 Afficher"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 10 }]}>
+                  Il te sera redemandé si tu réinstalles l'app ou te connectes sur le web.
+                </Text>
+                <PinPad value={tempPin} onChange={setTempPin} theme={C} reveal={pinRevealed} />
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border, marginTop: 16 }]} />
+
+                <TouchableOpacity
+                  style={[styles.smallBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border, alignSelf: "flex-start" }]}
+                  onPress={handleOpenChangePassword}
+                >
+                  <Text style={[styles.smallBtnText, { color: C.muted }]}>🔒 Changer mon mot de passe</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.saveBtn, { backgroundColor: C.accent, marginTop: 16 }, savingProfile && { opacity: 0.6 }]}
+                  onPress={handleSaveProfile}
+                  disabled={savingProfile}
+                >
+                  {savingProfile
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : <Text style={styles.saveBtnText}>Enregistrer</Text>
+                  }
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── MODAL CHANGER MOT DE PASSE ───────────────────────────────────── */}
+      <Modal visible={changePasswordModal} transparent animationType="slide" onRequestClose={() => setChangePasswordModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <View style={styles.overlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setChangePasswordModal(false)}
+            />
+            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent }]}>
+              <Text style={[styles.sheetTitle, { color: "#fff" }]}>🔒 Changer mon mot de passe</Text>
+              <TextInput
+                style={[styles.sheetInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                placeholder="Nouveau mot de passe"
+                placeholderTextColor={C.muted}
+                value={newPassword}
+                onChangeText={setNewPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <TextInput
+                style={[styles.sheetInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                placeholder="Confirmer le nouveau mot de passe"
+                placeholderTextColor={C.muted}
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                autoCapitalize="none"
+              />
+              <TouchableOpacity
+                style={[styles.saveBtn, { backgroundColor: C.accent, marginTop: 8 }, savingPassword && { opacity: 0.6 }]}
+                onPress={handleChangePassword}
+                disabled={savingPassword}
+              >
+                {savingPassword
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <Text style={styles.saveBtnText}>Enregistrer</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
   );
 }
@@ -269,4 +626,36 @@ const styles = StyleSheet.create({
   activityStatusBadge: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 8, paddingVertical: 3 },
   activityStatusText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 10 },
   activityChevron: { fontFamily: "DM_Sans_700Bold", fontSize: 16 },
+
+  editProfileBtn: {
+    borderWidth: 1, borderRadius: 10,
+    paddingVertical: 10, alignItems: "center",
+    marginTop: 4,
+  },
+  editProfileBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
+
+  toast: { position: "absolute", bottom: 24, alignSelf: "center", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
+  toastText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "#fff" },
+
+  overlay: { flex: 1, justifyContent: "flex-end" },
+  sheet: {
+    borderWidth: 1, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+    padding: 20, paddingBottom: 32,
+  },
+  sheetTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 19, marginBottom: 16 },
+  sheetInput: {
+    borderWidth: 1, borderRadius: 10, padding: 13,
+    fontFamily: "DM_Sans_400Regular", fontSize: 15, marginBottom: 10,
+  },
+
+  photoSection: { alignItems: "center", marginBottom: 6 },
+  smallBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12 },
+  smallBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
+
+  fieldDivider: { height: 1, marginVertical: 16 },
+  fieldLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10, marginTop: 4 },
+  sectionTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+
+  saveBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center" },
+  saveBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
 });

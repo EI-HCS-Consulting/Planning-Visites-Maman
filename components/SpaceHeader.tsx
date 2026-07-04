@@ -3,6 +3,7 @@ import { View, Text, Image, TouchableOpacity, StyleSheet, Linking, Modal } from 
 import { useRouter } from "expo-router";
 import type { PatientSpace } from "@/lib/types";
 import type { Theme } from "@/lib/themes";
+import { activeAddressParts, addressLines, googleMapsSearchUrl, joinAddress } from "@/lib/address";
 
 export type HomeTab = "calendar" | "slots" | "nights" | "info" | "share";
 
@@ -13,10 +14,6 @@ const TABS: { id: HomeTab; label: string }[] = [
   { id: "info", label: "ℹ️ Infos" },
   { id: "share", label: "📱 Partager" },
 ];
-
-function googleMapsSearchUrl(address: string) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-}
 
 /**
  * Bandeau partagé en haut de chaque écran de la zone "home" (Calendrier /
@@ -38,12 +35,27 @@ export default function SpaceHeader({
   const router = useRouter();
   const [lightbox, setLightbox] = useState(false);
 
-  const infoParts = [space.hospital_service, space.hospital_sector, space.hospital_room]
-    .filter((p): p is string => !!p && p.trim().length > 0);
-  const infoLine = [infoParts.join(" | "), space.hospital_name].filter(Boolean).join(" · ");
+  const serviceSector = [space.hospital_service, space.hospital_sector]
+    .filter((p): p is string => !!p && p.trim().length > 0)
+    .join(" | ");
+  const infoLines = space.home_care_mode
+    ? []
+    : [space.hospital_name, serviceSector, space.hospital_room]
+        .filter((p): p is string => !!p && p.trim().length > 0);
+  const infoLine = infoLines.join("\n");
 
+  const parts = activeAddressParts(space);
+  const lines = addressLines(parts);
+  const addressLine = lines.join("\n");
+
+  // Domicile : lien Maps généré automatiquement depuis l'adresse saisie.
+  // Hôpital : lien collé manuellement par l'admin (trouvé sur internet) —
+  // avec repli sur la génération auto tant qu'il n'a rien collé.
   function openAddress() {
-    const url = space.hospital_maps_url || (space.hospital_address ? googleMapsSearchUrl(space.hospital_address) : null);
+    const full = joinAddress(parts);
+    const url = space.home_care_mode
+      ? (full ? googleMapsSearchUrl(full) : null)
+      : (space.hospital_maps_url || (full ? googleMapsSearchUrl(full) : null));
     if (url) Linking.openURL(url).catch(() => {});
   }
 
@@ -71,9 +83,9 @@ export default function SpaceHeader({
         <Text style={[styles.infoLine, { color: C.gold }]}>{infoLine}</Text>
       )}
 
-      {!!space.hospital_address && (
+      {!!addressLine && (
         <TouchableOpacity onPress={openAddress} style={styles.addressRow}>
-          <Text style={[styles.addressText, { color: C.accent }]}>📍 {space.hospital_address}</Text>
+          <Text style={[styles.addressText, { color: C.accent }]}>📍 {addressLine}</Text>
         </TouchableOpacity>
       )}
 
@@ -122,17 +134,17 @@ export default function SpaceHeader({
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: 20,
-    paddingTop: 52,
+    paddingTop: 42,
     paddingBottom: 0,
     borderBottomWidth: 1,
     alignItems: "center",
   },
   logoWrap: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 140,
+    height: 140,
+    borderRadius: 70,
     overflow: "hidden",
-    marginBottom: 8,
+    marginBottom: -16,
   },
   logoPhoto: {
     position: "absolute",

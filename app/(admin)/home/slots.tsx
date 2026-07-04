@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useSpace } from "@/lib/SpaceContext";
 import { supabase } from "@/lib/supabase";
-import { getSlotOccupancy, getNightReservation, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
+import { getSlotOccupancy, getNightReservation, toISO, toFrLong, toFrShort, addDays, nightStartSlot, nightRangeLabel } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 import SpaceHeader from "@/components/SpaceHeader";
 import AdminAddReservation, { type AdminAddReservationHandle } from "@/components/AdminAddReservation";
@@ -101,17 +101,17 @@ export default function AdminSlotsScreen() {
             <View style={[styles.slotCard, { backgroundColor: C.card, borderColor: nightResa ? "rgba(233,69,96,0.3)" : C.border }]}>
               <View style={styles.slotHeader}>
                 <Text style={[styles.slotTime, { color: C.gold }]}>🌙 Nuitée</Text>
-                <Text style={[styles.slotCount, { color: C.muted }]}>18h → 11h</Text>
                 {!nightResa && (
                   <TouchableOpacity
                     style={[styles.addResaBtn, { backgroundColor: C.accent }]}
-                    onPress={() => addRef.current?.open(iso, "18:00", "Nuit")}
+                    onPress={() => addRef.current?.open(iso, nightStartSlot(slotConfig), "Nuit")}
                   >
                     <Text style={styles.addResaBtnText}>+ Ajouter</Text>
                   </TouchableOpacity>
                 )}
                 {nightResa && <Text style={[styles.fullTag, { color: C.danger }]}>Occupée</Text>}
               </View>
+              <Text style={[styles.slotCount, { color: C.muted, marginBottom: 8 }]}>{nightRangeLabel(slotConfig)}</Text>
               {!nightResa ? (
                 <Text style={[styles.slotEmpty, { color: C.muted }]}>Aucun visiteur inscrit</Text>
               ) : (

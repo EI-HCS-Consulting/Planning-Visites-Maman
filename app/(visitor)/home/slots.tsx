@@ -4,7 +4,7 @@ import { useVisitorSpace } from "@/lib/VisitorContext";
 import { getVisitorSession } from "@/lib/visitorSession";
 import SpaceHeader from "@/components/SpaceHeader";
 import BookingFlow, { type BookingFlowHandle } from "@/components/BookingFlow";
-import { getSlotOccupancy, getNightReservation, isSlotPast, toISO, toFrLong, toFrShort, addDays } from "@/lib/slotUtils";
+import { getSlotOccupancy, getNightReservation, isSlotPast, toISO, toFrLong, toFrShort, addDays, nightStartSlot, nightRangeLabel } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 
 // Recentré sur les créneaux "Visite" uniquement depuis le Lot 3 — la nuitée
@@ -131,7 +131,7 @@ export default function SlotsScreen() {
             >
               <View style={styles.slotLeft}>
                 <Text style={[styles.slotTime, { color: C.gold }]}>🌙 Nuitée</Text>
-                <Text style={[styles.slotCount, { color: C.muted }]}>18h → 11h</Text>
+                <Text style={[styles.slotCount, { color: C.muted }]}>{nightRangeLabel(slotConfig)}</Text>
                 {!nightResa
                   ? <Text style={[styles.slotEmpty, { color: C.muted }]}>——</Text>
                   : (
@@ -147,7 +147,7 @@ export default function SlotsScreen() {
               {!nightResa ? (
                 <TouchableOpacity
                   style={[styles.reserveBtn, { backgroundColor: C.accent }]}
-                  onPress={() => nightFlowRef.current?.openBooking(iso, "18:00")}
+                  onPress={() => nightFlowRef.current?.openBooking(iso, nightStartSlot(slotConfig))}
                   activeOpacity={0.85}
                 >
                   <Text style={styles.reserveBtnText}>+ Réserver</Text>

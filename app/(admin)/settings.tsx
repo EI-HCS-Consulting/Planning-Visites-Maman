@@ -2,8 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Alert, ActivityIndicator, Image, TextInput, Switch,
-  Linking, Modal, KeyboardAvoidingView, Platform,
+  Linking, Modal, KeyboardAvoidingView, Platform, Dimensions,
 } from "react-native";
+
+// Percentages ("85%") on the sheet don't resolve reliably since its parent
+// TouchableOpacity has no defined height (hugs content) — use a pixel value
+// so the ScrollView actually gets a bounded viewport to scroll within.
+const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.85;
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -12,7 +17,9 @@ import { supabase } from "@/lib/supabase";
 import { useSpace } from "@/lib/SpaceContext";
 import { themes, themeLabels } from "@/lib/themes";
 import PatientAvatar from "@/components/PatientAvatar";
+import { resolvePlaceFromMapsUrl } from "@/lib/address";
 import type { ThemeKey } from "@/lib/themes";
+import type { NewsEntry, Task, SupportMessage } from "@/lib/types";
 
 // ─── Historique des champs hospitaliers ───────────────────────────────────────
 interface FieldHistoryEntry {
@@ -27,11 +34,19 @@ const FIELD_LABELS: Record<string, string> = {
   hospital_room: "Chambre",
   hospital_service: "Service",
   hospital_sector: "Secteur",
+  visit_rules: "Consignes de visite",
+  home_care_mode: "Mode de soin",
+  home_address: "Adresse du domicile",
+  home_maps_url: "Lien Google Maps (domicile)",
 };
 const FIELD_ICONS: Record<string, string> = {
   hospital_room: "🛏️",
   hospital_service: "🏥",
   hospital_sector: "📍",
+  visit_rules: "📝",
+  home_care_mode: "🔄",
+  home_address: "📍",
+  home_maps_url: "🗺️",
 };
 
 // ─── Swatches de prévisualisation par thème ───────────────────────────────────
@@ -45,6 +60,13 @@ const THEME_SWATCHES: Record<ThemeKey, string> = {
 };
 
 const THEME_ORDER: ThemeKey[] = ["blue", "red", "pink", "green", "yellow", "orange"];
+
+const TASK_CAT_ICONS: Record<Task["category"], string> = {
+  repas: "🍽️",
+  affaires: "👕",
+  courses: "🛒",
+  autre: "💡",
+};
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -85,20 +107,51 @@ export default function SettingsScreen() {
     }
   }, [space]);
 
-  // Coordonnées de l'hôpital (name / address / maps url)
+  // Coordonnées de l'hôpital (name / address / lien Maps collé manuellement par l'admin)
   const hospitalCoordsInit = useRef(false);
   const [hospitalName, setHospitalName] = useState("");
   const [hospitalAddress, setHospitalAddress] = useState("");
-  const [mapsUrl, setMapsUrl] = useState("");
+  const [hospitalAddressLine2, setHospitalAddressLine2] = useState("");
+  const [hospitalPostalCode, setHospitalPostalCode] = useState("");
+  const [hospitalCity, setHospitalCity] = useState("");
+  const [hospitalCountry, setHospitalCountry] = useState("");
+  const [hospitalMapsUrl, setHospitalMapsUrl] = useState("");
+  const [hospitalNameResolving, setHospitalNameResolving] = useState(false);
   const [hospitalCoordsSaving, setHospitalCoordsSaving] = useState(false);
   useEffect(() => {
     if (space && !hospitalCoordsInit.current) {
       hospitalCoordsInit.current = true;
       setHospitalName(space.hospital_name ?? "");
       setHospitalAddress(space.hospital_address ?? "");
-      setMapsUrl(space.hospital_maps_url ?? "");
+      setHospitalAddressLine2(space.hospital_address_line2 ?? "");
+      setHospitalPostalCode(space.hospital_postal_code ?? "");
+      setHospitalCity(space.hospital_city ?? "");
+      setHospitalCountry(space.hospital_country ?? "");
+      setHospitalMapsUrl(space.hospital_maps_url ?? "");
     }
   }, [space]);
+
+  // Coordonnées du domicile (mode "Soin à domicile")
+  const homeCoordsInit = useRef(false);
+  const [homeAddress, setHomeAddress] = useState("");
+  const [homeAddressLine2, setHomeAddressLine2] = useState("");
+  const [homePostalCode, setHomePostalCode] = useState("");
+  const [homeCity, setHomeCity] = useState("");
+  const [homeCountry, setHomeCountry] = useState("");
+  const [homeCoordsSaving, setHomeCoordsSaving] = useState(false);
+  useEffect(() => {
+    if (space && !homeCoordsInit.current) {
+      homeCoordsInit.current = true;
+      setHomeAddress(space.home_address ?? "");
+      setHomeAddressLine2(space.home_address_line2 ?? "");
+      setHomePostalCode(space.home_postal_code ?? "");
+      setHomeCity(space.home_city ?? "");
+      setHomeCountry(space.home_country ?? "");
+    }
+  }, [space]);
+
+  // Modal profil patient (photo + changement de nom + thème)
+  const [editProfileModal, setEditProfileModal] = useState(false);
 
   // Modal changement de nom
   const [nameChangeModal, setNameChangeModal] = useState(false);
@@ -110,8 +163,30 @@ export default function SettingsScreen() {
   const [fieldHistory, setFieldHistory] = useState<FieldHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Nuitées toggle
+  // Modal Historique (infos hospitalières + consignes + publications)
+  const [historyModal, setHistoryModal] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [pubLoading, setPubLoading] = useState(false);
+  const [pubNews, setPubNews] = useState<NewsEntry[]>([]);
+  const [pubTasks, setPubTasks] = useState<Task[]>([]);
+  const [pubMessages, setPubMessages] = useState<SupportMessage[]>([]);
+
+  // Soin à domicile toggle
+  const [homeCareToggling, setHomeCareToggling] = useState(false);
+
+  // Nuitées toggle + heures
   const [nightToggling, setNightToggling] = useState(false);
+  const nightHoursInit = useRef(false);
+  const [nightStartHour, setNightStartHour] = useState(19);
+  const [nightEndHour, setNightEndHour] = useState(8);
+  const [nightHoursSaving, setNightHoursSaving] = useState(false);
+  useEffect(() => {
+    if (slotConfig && !nightHoursInit.current) {
+      nightHoursInit.current = true;
+      setNightStartHour(slotConfig.night_start_hour ?? 19);
+      setNightEndHour(slotConfig.night_end_hour ?? 8);
+    }
+  }, [slotConfig]);
 
   // Règles des créneaux
   const slotRulesInit = useRef(false);
@@ -171,6 +246,43 @@ export default function SettingsScreen() {
     setHistoryLoading(false);
   }
 
+  async function loadPublicationsHistory() {
+    if (!space) return;
+    setPubLoading(true);
+    const [newsData, tasksData, msgsData] = await Promise.all([
+      supabase.from("news_entries").select("*").eq("space_id", space.id).order("created_at", { ascending: false }),
+      supabase.from("tasks").select("*").eq("space_id", space.id).order("created_at", { ascending: false }),
+      supabase.from("support_messages").select("*").eq("space_id", space.id).order("created_at", { ascending: false }),
+    ]);
+    setPubNews(newsData.data || []);
+    setPubTasks(tasksData.data || []);
+    setPubMessages(msgsData.data || []);
+    setPubLoading(false);
+  }
+
+  function handleOpenHistory() {
+    setHistorySearch("");
+    setHistoryModal(true);
+    loadHistory();
+    loadPublicationsHistory();
+  }
+
+  function matchesHistoryQuery(...values: (string | null | undefined)[]): boolean {
+    const q = historySearch.trim().toLowerCase();
+    if (!q) return true;
+    return values.some((v) => (v ?? "").toLowerCase().includes(q));
+  }
+
+  const hospitalFieldHistory = fieldHistory.filter((h) =>
+    h.field_name !== "visit_rules" && matchesHistoryQuery(FIELD_LABELS[h.field_name] ?? h.field_name, h.old_value, h.new_value)
+  );
+  const visitRulesHistory = fieldHistory.filter((h) =>
+    h.field_name === "visit_rules" && matchesHistoryQuery(h.old_value, h.new_value)
+  );
+  const filteredPubNews = pubNews.filter((n) => matchesHistoryQuery(n.content, n.author_prenom, n.author_nom));
+  const filteredPubTasks = pubTasks.filter((t) => matchesHistoryQuery(t.title, t.description, t.category));
+  const filteredPubMessages = pubMessages.filter((m) => matchesHistoryQuery(m.message, m.author_prenom, m.author_nom));
+
   useEffect(() => { if (space) loadHistory(); }, [space?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function logFieldChange(fieldName: string, oldValue: string | null | undefined, newValue: string | null) {
@@ -210,13 +322,36 @@ export default function SettingsScreen() {
   async function handleSaveNotes() {
     if (!space) return;
     setNotesSaving(true);
+    const nextRules = visitRules.trim() || null;
+    await logFieldChange("visit_rules", space.visit_rules, nextRules);
     const { error } = await supabase
       .from("patient_spaces")
-      .update({ visit_rules: visitRules.trim() })
+      .update({ visit_rules: nextRules })
       .eq("id", space.id);
     setNotesSaving(false);
     if (error) showToast("Erreur lors de la sauvegarde.");
-    else showToast("Message enregistré ✓");
+    else { showToast("Message enregistré ✓"); loadHistory(); }
+  }
+
+  // Dès que l'admin quitte le champ lien Maps, on tente de récupérer le nom
+  // (lu dans l'URL) et l'adresse (géocodage inverse des coordonnées GPS de
+  // l'URL via OpenStreetMap Nominatim) — sans écraser une saisie manuelle
+  // en cours si la résolution échoue.
+  async function handleHospitalMapsUrlBlur() {
+    const url = hospitalMapsUrl.trim();
+    if (!url) return;
+    setHospitalNameResolving(true);
+    const place = await resolvePlaceFromMapsUrl(url);
+    setHospitalNameResolving(false);
+    if (place.name) setHospitalName(place.name);
+    if (place.street) setHospitalAddress(place.street);
+    if (place.postalCode) setHospitalPostalCode(place.postalCode);
+    if (place.city) setHospitalCity(place.city);
+    if (place.country) setHospitalCountry(place.country);
+    const gotAddress = !!(place.street || place.postalCode || place.city);
+    if (place.name && gotAddress) showToast("Nom et adresse récupérés depuis le lien ✓");
+    else if (place.name) showToast("Nom récupéré — adresse à compléter manuellement.");
+    else if (gotAddress) showToast("Adresse récupérée depuis le lien ✓");
   }
 
   // ── Coordonnées hôpital ────────────────────────────────────────────────────
@@ -228,12 +363,41 @@ export default function SettingsScreen() {
       .update({
         hospital_name: hospitalName.trim() || null,
         hospital_address: hospitalAddress.trim() || null,
-        hospital_maps_url: mapsUrl.trim() || null,
+        hospital_address_line2: hospitalAddressLine2.trim() || null,
+        hospital_postal_code: hospitalPostalCode.trim() || null,
+        hospital_city: hospitalCity.trim() || null,
+        hospital_country: hospitalCountry.trim() || null,
+        hospital_maps_url: hospitalMapsUrl.trim() || null,
       })
       .eq("id", space.id);
     setHospitalCoordsSaving(false);
     if (error) showToast("Erreur lors de la sauvegarde.");
     else showToast("Coordonnées enregistrées ✓");
+  }
+
+  // ── Coordonnées domicile (mode Soin à domicile) ───────────────────────────
+  async function handleSaveHomeCoords() {
+    if (!space) return;
+    setHomeCoordsSaving(true);
+    const nextAddress = homeAddress.trim() || null;
+    const nextAddressLine2 = homeAddressLine2.trim() || null;
+    const nextPostalCode = homePostalCode.trim() || null;
+    const nextCity = homeCity.trim() || null;
+    const nextCountry = homeCountry.trim() || null;
+    if (nextAddress !== space.home_address) await logFieldChange("home_address", space.home_address, nextAddress);
+    const { error } = await supabase
+      .from("patient_spaces")
+      .update({
+        home_address: nextAddress,
+        home_address_line2: nextAddressLine2,
+        home_postal_code: nextPostalCode,
+        home_city: nextCity,
+        home_country: nextCountry,
+      })
+      .eq("id", space.id);
+    setHomeCoordsSaving(false);
+    if (error) showToast("Erreur lors de la sauvegarde.");
+    else { showToast("Coordonnées enregistrées ✓"); loadHistory(); }
   }
 
   function handleOpenNameChange() {
@@ -257,6 +421,28 @@ export default function SettingsScreen() {
     setNameChangeModal(false);
   }
 
+  // ── Soin à domicile toggle ─────────────────────────────────────────────────
+  async function handleToggleHomeCare() {
+    if (!space) return;
+    setHomeCareToggling(true);
+    const nextMode = !space.home_care_mode;
+    const { error } = await supabase
+      .from("patient_spaces")
+      .update({ home_care_mode: nextMode })
+      .eq("id", space.id);
+    if (!error) {
+      await logFieldChange(
+        "home_care_mode",
+        space.home_care_mode ? "Soin à domicile" : "Suivi à l'hôpital",
+        nextMode ? "Soin à domicile" : "Suivi à l'hôpital"
+      );
+      loadHistory();
+    }
+    setHomeCareToggling(false);
+    if (error) showToast("Erreur lors de la mise à jour.");
+    else showToast(nextMode ? "Soin à domicile activé ✓" : "Retour au suivi hospitalier ✓");
+  }
+
   // ── Nuitées toggle ─────────────────────────────────────────────────────────
   async function handleToggleNight() {
     if (!slotConfig) return;
@@ -268,6 +454,18 @@ export default function SettingsScreen() {
     setNightToggling(false);
     if (error) showToast("Erreur lors de la mise à jour.");
     else showToast(slotConfig.night_enabled ? "Nuitées suspendues ✓" : "Nuitées activées ✓");
+  }
+
+  async function handleSaveNightHours() {
+    if (!slotConfig) return;
+    setNightHoursSaving(true);
+    const { error } = await supabase.from("slot_config").update({
+      night_start_hour: nightStartHour,
+      night_end_hour: nightEndHour,
+    }).eq("id", slotConfig.id);
+    setNightHoursSaving(false);
+    if (error) showToast("Erreur lors de la sauvegarde.");
+    else { showToast("Heures de nuitée enregistrées ✓"); refreshSlotConfig(); }
   }
 
   // ── Règles des créneaux ───────────────────────────────────────────────────
@@ -495,229 +693,286 @@ export default function SettingsScreen() {
                 <PatientAvatar photoUrl={displayPhotoUrl} firstname={space.patient_firstname} lastname={space.patient_lastname} size={56} C={C} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.patientName, { color: "#fff" }]}>{space.patient_firstname} {space.patient_lastname}</Text>
-                  <Text style={[styles.patientHospital, { color: C.muted }]}>{space.hospital_name}{space.hospital_room ? ` · ${space.hospital_room}` : ""}</Text>
+                  <Text style={[styles.patientHospital, { color: C.muted }]}>
+                    {space.home_care_mode
+                      ? "🏠 Soin à domicile"
+                      : `${space.hospital_name}${space.hospital_room ? ` · ${space.hospital_room}` : ""}`}
+                  </Text>
                 </View>
               </View>
-              <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
-                Le nom et prénom du patient ne peuvent pas être modifiés directement. En cas d'erreur ou de changement, contactez le service client.
-              </Text>
               <TouchableOpacity
                 style={[styles.saveNotesBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: C.border }]}
-                onPress={handleOpenNameChange}
+                onPress={() => setEditProfileModal(true)}
               >
-                <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>✏️ Demander un changement de nom</Text>
+                <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>✏️ Modifier le profil patient</Text>
               </TouchableOpacity>
             </View>
 
-            {/* ── Section : Photo patient ───────────────────────────────────── */}
-            <Text style={[styles.sectionTitle, { color: C.gold }]}>Photo du patient</Text>
+            {/* ── Section : Mode de soin ────────────────────────────────────── */}
+            <Text style={[styles.sectionTitle, { color: C.gold }]}>Mode de soin</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardDesc, { color: C.muted }]}>
-                Affichée en avatar dans l'app pour tous les visiteurs. Ronde, centrée sur le visage.
-              </Text>
+              <View style={styles.nightRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.nightLabel, { color: "#fff" }]}>
+                    {space.home_care_mode ? "Soin à domicile" : "Suivi à l'hôpital"}
+                  </Text>
+                  <Text style={[styles.nightDesc, { color: C.muted }]}>
+                    {space.home_care_mode
+                      ? "Le bandeau affiche une adresse classique et le lien Google Maps, sans coordonnées hospitalières."
+                      : "Activez si le patient quitte l'hôpital et que les visites se poursuivent à domicile."}
+                  </Text>
+                </View>
+                {homeCareToggling
+                  ? <ActivityIndicator color={C.accent} />
+                  : <Switch
+                      value={space.home_care_mode}
+                      onValueChange={handleToggleHomeCare}
+                      trackColor={{ false: C.border, true: C.accent }}
+                      thumbColor="#fff"
+                    />
+                }
+              </View>
+            </View>
 
-              <View style={styles.photoRow}>
-                <PatientAvatar
-                  photoUrl={displayPhotoUrl}
-                  firstname={space.patient_firstname}
-                  lastname={space.patient_lastname}
-                  size={72}
-                  C={C}
-                />
-                <View style={{ flex: 1, gap: 8 }}>
+            {space.home_care_mode ? (
+              <>
+                {/* ── Section : Coordonnées (domicile) ─────────────────────── */}
+                <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées</Text>
+                <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <Text style={[styles.cardDesc, { color: C.muted }]}>Adresse affichée dans l'app — le lien Google Maps est généré automatiquement.</Text>
+
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>📍 Adresse</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : 12 rue des Lilas"
+                    placeholderTextColor={C.muted}
+                    value={homeAddress}
+                    onChangeText={setHomeAddress}
+                  />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🏠 Complément d'adresse</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : Bâtiment B, 2e étage"
+                    placeholderTextColor={C.muted}
+                    value={homeAddressLine2}
+                    onChangeText={setHomeAddressLine2}
+                  />
+
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.fieldLabel, { color: C.gold }]}>Code postal</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="38000"
+                        placeholderTextColor={C.muted}
+                        value={homePostalCode}
+                        onChangeText={setHomePostalCode}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <Text style={[styles.fieldLabel, { color: C.gold }]}>Ville</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Grenoble"
+                        placeholderTextColor={C.muted}
+                        value={homeCity}
+                        onChangeText={setHomeCity}
+                      />
+                    </View>
+                  </View>
+
+                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🌍 Pays</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Laisser vide si France"
+                    placeholderTextColor={C.muted}
+                    value={homeCountry}
+                    onChangeText={setHomeCountry}
+                  />
+
                   <TouchableOpacity
-                    style={[styles.photoBtn, { backgroundColor: C.accent }]}
-                    onPress={handlePhotoUpload}
-                    disabled={photoUploading}
+                    style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, homeCoordsSaving && { opacity: 0.6 }]}
+                    onPress={handleSaveHomeCoords}
+                    disabled={homeCoordsSaving}
                   >
-                    {photoUploading
+                    {homeCoordsSaving
                       ? <ActivityIndicator color="#fff" size="small" />
-                      : <Text style={styles.photoBtnText}>
-                          {displayPhotoUrl ? "Changer la photo" : "Ajouter une photo"}
-                        </Text>
+                      : <Text style={styles.saveNotesBtnText}>Enregistrer les coordonnées</Text>
                     }
                   </TouchableOpacity>
-                  {displayPhotoUrl && (
-                    <TouchableOpacity
-                      style={[styles.photoBtn, { borderWidth: 1, borderColor: "rgba(233,69,96,0.4)", backgroundColor: "rgba(233,69,96,0.08)" }]}
-                      onPress={handleRemovePhoto}
-                    >
-                      <Text style={[styles.photoBtnText, { color: "#e94560" }]}>Supprimer</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
-              </View>
-            </View>
+              </>
+            ) : (
+              <>
+                {/* ── Section : Coordonnées de l'hôpital ───────────────────── */}
+                <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées de l'hôpital</Text>
+                <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <Text style={[styles.cardDesc, { color: C.muted }]}>Colle le lien Google Maps trouvé sur internet — le nom et l'adresse se remplissent automatiquement en dessous (à vérifier, l'adresse peut être approximative).</Text>
 
-            {/* ── Section : Coordonnées de l'hôpital ──────────────────────────── */}
-            <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées de l'hôpital</Text>
-            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardDesc, { color: C.muted }]}>Nom, adresse et lien Google Maps affichés dans l'app.</Text>
-
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>🏥 Nom de l'hôpital</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Ex : CHU de Grenoble"
-                placeholderTextColor={C.muted}
-                value={hospitalName}
-                onChangeText={setHospitalName}
-              />
-
-              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>📍 Adresse</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Ex : Avenue de Maquis du Grésivaudan, Grenoble"
-                placeholderTextColor={C.muted}
-                value={hospitalAddress}
-                onChangeText={setHospitalAddress}
-              />
-
-              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>🗺️ Lien Google Maps (optionnel)</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="https://maps.google.com/..."
-                placeholderTextColor={C.muted}
-                value={mapsUrl}
-                onChangeText={setMapsUrl}
-                autoCapitalize="none"
-                keyboardType="url"
-              />
-
-              <TouchableOpacity
-                style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, hospitalCoordsSaving && { opacity: 0.6 }]}
-                onPress={handleSaveHospitalCoords}
-                disabled={hospitalCoordsSaving}
-              >
-                {hospitalCoordsSaving
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.saveNotesBtnText}>Enregistrer les coordonnées</Text>
-                }
-              </TouchableOpacity>
-            </View>
-
-            {/* ── Section : Thème ───────────────────────────────────────────── */}
-            <Text style={[styles.sectionTitle, { color: C.gold }]}>Thème de couleur</Text>
-            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardDesc, { color: C.muted }]}>
-                Appliqué en temps réel pour tous les visiteurs.
-              </Text>
-              {themeUpdating && (
-                <ActivityIndicator color={C.accent} style={{ marginBottom: 12 }} />
-              )}
-              <View style={styles.themeGrid}>
-                {THEME_ORDER.map((key) => {
-                  const isActive = space.theme === key;
-                  return (
-                    <TouchableOpacity
-                      key={key}
-                      style={[
-                        styles.themeOption,
-                        {
-                          backgroundColor: C.bg,
-                          borderColor: isActive ? THEME_SWATCHES[key] : C.border,
-                          borderWidth: isActive ? 2 : 1,
-                        },
-                      ]}
-                      onPress={() => handleThemeChange(key)}
-                      disabled={themeUpdating}
-                      activeOpacity={0.75}
-                    >
-                      <View style={[styles.themeSwatch, { backgroundColor: THEME_SWATCHES[key] }]} />
-                      <Text style={[styles.themeLabel, { color: isActive ? "#fff" : C.muted }]}>
-                        {themeLabels[key]}
-                      </Text>
-                      {isActive && (
-                        <Text style={[styles.themeCheck, { color: THEME_SWATCHES[key] }]}>✓</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
-            {/* ── Section : Infos hospitalières ─────────────────────────────── */}
-            <Text style={[styles.sectionTitle, { color: C.gold }]}>Infos hospitalières</Text>
-            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardDesc, { color: C.muted }]}>
-                Affichées dans le bandeau de l'app. Chaque modification est datée et conservée.
-              </Text>
-
-              {/* Chambre */}
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>🛏️ Chambre</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Ex : 205 B"
-                placeholderTextColor={C.muted}
-                value={room}
-                onChangeText={setRoom}
-              />
-
-              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-              {/* Service médical */}
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>🏥 Service médical</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Ex : NEUROLOGIE"
-                placeholderTextColor={C.muted}
-                value={service}
-                onChangeText={setService}
-                autoCapitalize="characters"
-              />
-
-              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-              {/* Secteur */}
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>📍 Secteur</Text>
-              <TextInput
-                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
-                placeholder="Ex : Secteur A"
-                placeholderTextColor={C.muted}
-                value={sector}
-                onChangeText={setSector}
-              />
-
-              <TouchableOpacity
-                style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, hospitalInfosSaving && { opacity: 0.6 }]}
-                onPress={handleSaveHospitalInfos}
-                disabled={hospitalInfosSaving}
-              >
-                {hospitalInfosSaving
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={styles.saveNotesBtnText}>Enregistrer les infos hospitalières</Text>
-                }
-              </TouchableOpacity>
-
-              {/* Historique */}
-              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-              <Text style={[styles.fieldLabel, { color: C.gold }]}>🕐 Historique des changements</Text>
-              {historyLoading ? (
-                <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
-              ) : fieldHistory.length === 0 ? (
-                <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun changement enregistré.</Text>
-              ) : (
-                fieldHistory.map((h) => (
-                  <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                    <Text style={[styles.historyField, { color: "#fff" }]}>
-                      {FIELD_ICONS[h.field_name] ?? "✏️"} {FIELD_LABELS[h.field_name] ?? h.field_name}
-                      {h.new_value ? ` → "${h.new_value}"` : " → (vide)"}
-                    </Text>
-                    {h.old_value != null && (
-                      <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
-                    )}
-                    <Text style={[styles.historyDate, { color: C.muted }]}>
-                      {new Date(h.changed_at).toLocaleString("fr-FR", {
-                        day: "numeric", month: "long", year: "numeric",
-                        hour: "2-digit", minute: "2-digit",
-                      })}
-                    </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={[styles.fieldLabel, { color: C.gold }]}>🗺️ Lien Google Maps</Text>
+                    {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
                   </View>
-                ))
-              )}
-            </View>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Colle ici le lien copié depuis Google Maps"
+                    placeholderTextColor={C.muted}
+                    value={hospitalMapsUrl}
+                    onChangeText={setHospitalMapsUrl}
+                    onBlur={handleHospitalMapsUrlBlur}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>🏥 Nom de l'hôpital</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : CHU de Grenoble"
+                    placeholderTextColor={C.muted}
+                    value={hospitalName}
+                    onChangeText={setHospitalName}
+                  />
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                    <Text style={[styles.fieldLabel, { color: C.gold }]}>📍 Adresse</Text>
+                    {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
+                  </View>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : Avenue de Maquis du Grésivaudan"
+                    placeholderTextColor={C.muted}
+                    value={hospitalAddress}
+                    onChangeText={setHospitalAddress}
+                  />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🏥 Complément d'adresse</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : Bâtiment Chevalier, entrée C"
+                    placeholderTextColor={C.muted}
+                    value={hospitalAddressLine2}
+                    onChangeText={setHospitalAddressLine2}
+                  />
+
+                  <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.fieldLabel, { color: C.gold }]}>Code postal</Text>
+                        {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
+                      </View>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="38000"
+                        placeholderTextColor={C.muted}
+                        value={hospitalPostalCode}
+                        onChangeText={setHospitalPostalCode}
+                        keyboardType="number-pad"
+                      />
+                    </View>
+                    <View style={{ flex: 2 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.fieldLabel, { color: C.gold }]}>Ville</Text>
+                        {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
+                      </View>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Grenoble"
+                        placeholderTextColor={C.muted}
+                        value={hospitalCity}
+                        onChangeText={setHospitalCity}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginTop: 12 }}>
+                    <Text style={[styles.fieldLabel, { color: C.gold }]}>🌍 Pays</Text>
+                    {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
+                  </View>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Laisser vide si France"
+                    placeholderTextColor={C.muted}
+                    value={hospitalCountry}
+                    onChangeText={setHospitalCountry}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, hospitalCoordsSaving && { opacity: 0.6 }]}
+                    onPress={handleSaveHospitalCoords}
+                    disabled={hospitalCoordsSaving}
+                  >
+                    {hospitalCoordsSaving
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.saveNotesBtnText}>Enregistrer les coordonnées</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* ── Section : Infos hospitalières ─────────────────────────────── */}
+            {!space.home_care_mode && (
+              <>
+                <Text style={[styles.sectionTitle, { color: C.gold }]}>Infos hospitalières</Text>
+                <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+                  <Text style={[styles.cardDesc, { color: C.muted }]}>
+                    Affichées dans le bandeau de l'app. Chaque modification est datée et conservée.
+                  </Text>
+
+                  {/* Service médical */}
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>🏥 Service médical</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : NEUROLOGIE"
+                    placeholderTextColor={C.muted}
+                    value={service}
+                    onChangeText={setService}
+                    autoCapitalize="characters"
+                  />
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  {/* Secteur */}
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>📍 Secteur</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : Secteur A"
+                    placeholderTextColor={C.muted}
+                    value={sector}
+                    onChangeText={setSector}
+                  />
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  {/* Chambre */}
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>🛏️ Chambre</Text>
+                  <TextInput
+                    style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                    placeholder="Ex : 205 B"
+                    placeholderTextColor={C.muted}
+                    value={room}
+                    onChangeText={setRoom}
+                  />
+
+                  <TouchableOpacity
+                    style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, hospitalInfosSaving && { opacity: 0.6 }]}
+                    onPress={handleSaveHospitalInfos}
+                    disabled={hospitalInfosSaving}
+                  >
+                    {hospitalInfosSaving
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.saveNotesBtnText}>Enregistrer les infos hospitalières</Text>
+                    }
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
             {/* ── Section : Consignes de visite / Infos ─────────────────────── */}
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Consignes de visite / Infos</Text>
@@ -1002,7 +1257,7 @@ export default function SettingsScreen() {
                       </Text>
                       <Text style={[styles.nightDesc, { color: C.muted }]}>
                         {slotConfig.night_enabled
-                          ? "Les visiteurs peuvent réserver une nuit (18h → 11h)."
+                          ? `Les visiteurs peuvent réserver une nuit (${nightStartHour}h → ${nightEndHour}h).`
                           : "Le bloc nuit est masqué pour les visiteurs."}
                       </Text>
                     </View>
@@ -1016,6 +1271,60 @@ export default function SettingsScreen() {
                         />
                     }
                   </View>
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>⏰ Heures de nuitée</Text>
+                  <View style={styles.hourRow}>
+                    <View style={styles.hourBlock}>
+                      <Text style={[styles.hourLabel, { color: C.muted }]}>Début</Text>
+                      <Text style={[styles.stepValue, { color: "#fff" }]}>{String(nightStartHour).padStart(2,"0")}:00</Text>
+                      <View style={styles.stepperRow}>
+                        <TouchableOpacity
+                          style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                          onPress={() => setNightStartHour((h) => (h + 23) % 24)}
+                        >
+                          <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                          onPress={() => setNightStartHour((h) => (h + 1) % 24)}
+                        >
+                          <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                    <Text style={[styles.hourSep, { color: C.muted }]}>→</Text>
+                    <View style={styles.hourBlock}>
+                      <Text style={[styles.hourLabel, { color: C.muted }]}>Fin (lendemain)</Text>
+                      <Text style={[styles.stepValue, { color: "#fff" }]}>{String(nightEndHour).padStart(2,"0")}:00</Text>
+                      <View style={styles.stepperRow}>
+                        <TouchableOpacity
+                          style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                          onPress={() => setNightEndHour((h) => (h + 23) % 24)}
+                        >
+                          <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                          onPress={() => setNightEndHour((h) => (h + 1) % 24)}
+                        >
+                          <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, nightHoursSaving && { opacity: 0.6 }]}
+                    onPress={handleSaveNightHours}
+                    disabled={nightHoursSaving}
+                  >
+                    {nightHoursSaving
+                      ? <ActivityIndicator color="#fff" size="small" />
+                      : <Text style={styles.saveNotesBtnText}>Enregistrer les heures de nuitée</Text>
+                    }
+                  </TouchableOpacity>
                 </View>
               </>
             )}
@@ -1026,6 +1335,24 @@ export default function SettingsScreen() {
               Aucun espace patient actif.{"\n"}Rendez-vous sur avectoi.care pour créer votre espace.
             </Text>
           </View>
+        )}
+
+        {/* ── Section : Historique ─────────────────────────────────────── */}
+        {hasSpace && space && (
+          <>
+            <Text style={[styles.sectionTitle, { color: C.gold }]}>Historique</Text>
+            <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+              <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
+                Infos hospitalières, consignes de visite et publications de l'espace.
+              </Text>
+              <TouchableOpacity
+                style={[styles.saveNotesBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: C.border }]}
+                onPress={handleOpenHistory}
+              >
+                <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>🕐 Voir l'historique</Text>
+              </TouchableOpacity>
+            </View>
+          </>
         )}
 
         {/* ── Section : Conservation RGPD ──────────────────────────────────── */}
@@ -1046,11 +1373,12 @@ export default function SettingsScreen() {
               <View style={[styles.card, {
                 backgroundColor: C.card,
                 borderColor: isUrgent ? "rgba(233,69,96,0.5)" : isWarning ? "rgba(230,126,34,0.4)" : C.border,
+                padding: 12,
               }]}>
                 <View style={styles.rgpdRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.rgpdLabel, { color: C.muted }]}>Suppression prévue le</Text>
-                    <Text style={[styles.rgpdDate, { color: isUrgent ? "#e94560" : "#fff" }]}>
+                    <Text style={[styles.rgpdDate, { color: isUrgent ? "#e94560" : "#fff", fontSize: 15 }]}>
                       {purgeDateFr}
                     </Text>
                     <Text style={[styles.rgpdDays, { color: alertColor }]}>
@@ -1062,18 +1390,18 @@ export default function SettingsScreen() {
                   </View>
                 </View>
 
-                <Text style={[styles.cardDesc, { marginTop: 12, marginBottom: 14 }]}>
+                <Text style={[styles.cardDesc, { color: C.muted, fontSize: 12, lineHeight: 17, marginTop: 8, marginBottom: 10 }]}>
                   Planning, souvenirs et messages seront définitivement supprimés à cette date. Conforme RGPD.
                 </Text>
 
                 <TouchableOpacity
-                  style={[styles.prolongBtn, { backgroundColor: C.accent }, prolonging && { opacity: 0.6 }]}
+                  style={[styles.prolongBtn, { backgroundColor: C.accent, paddingVertical: 10 }, prolonging && { opacity: 0.6 }]}
                   onPress={handleProlong}
                   disabled={prolonging}
                 >
                   {prolonging
                     ? <ActivityIndicator color="#fff" size="small" />
-                    : <Text style={styles.prolongBtnText}>⏳ Prolonger de 30 jours (renouvelable gratuitement)</Text>
+                    : <Text style={[styles.prolongBtnText, { textAlign: "center" }]}>⏳ Prolonger de 30 jours{"\n"}(renouvelable gratuitement)</Text>
                   }
                 </TouchableOpacity>
               </View>
@@ -1188,6 +1516,265 @@ export default function SettingsScreen() {
               </View>
             </TouchableOpacity>
           </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── MODAL PROFIL PATIENT (photo + nom + thème) ──────────────────── */}
+      <Modal visible={editProfileModal} transparent animationType="slide" onRequestClose={() => setEditProfileModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <View style={styles.overlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setEditProfileModal(false)}
+            />
+            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent, maxHeight: SHEET_MAX_HEIGHT }]}>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  <Text style={[styles.sheetTitle, { color: "#fff" }]}>✏️ Modifier le profil patient</Text>
+
+                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>Photo</Text>
+                  <Text style={[styles.cardDesc, { color: C.muted }]}>
+                    Affichée en avatar dans l'app pour tous les visiteurs. Ronde, centrée sur le visage.
+                  </Text>
+                  <View style={styles.photoRow}>
+                    <PatientAvatar
+                      photoUrl={displayPhotoUrl}
+                      firstname={space?.patient_firstname ?? ""}
+                      lastname={space?.patient_lastname ?? ""}
+                      size={72}
+                      C={C}
+                    />
+                    <View style={{ flex: 1, gap: 8 }}>
+                      <TouchableOpacity
+                        style={[styles.photoBtn, { backgroundColor: C.accent }]}
+                        onPress={handlePhotoUpload}
+                        disabled={photoUploading}
+                      >
+                        {photoUploading
+                          ? <ActivityIndicator color="#fff" size="small" />
+                          : <Text style={styles.photoBtnText}>
+                              {displayPhotoUrl ? "Changer la photo" : "Ajouter une photo"}
+                            </Text>
+                        }
+                      </TouchableOpacity>
+                      {displayPhotoUrl && (
+                        <TouchableOpacity
+                          style={[styles.photoBtn, { borderWidth: 1, borderColor: "rgba(233,69,96,0.4)", backgroundColor: "rgba(233,69,96,0.08)" }]}
+                          onPress={handleRemovePhoto}
+                        >
+                          <Text style={[styles.photoBtnText, { color: "#e94560" }]}>Supprimer</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>Nom du patient</Text>
+                  <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 8 }]}>
+                    Le nom et prénom ne peuvent pas être modifiés directement. En cas d'erreur ou de changement, contactez le service client.
+                  </Text>
+                  <TouchableOpacity
+                    style={[styles.saveNotesBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: C.border }]}
+                    onPress={handleOpenNameChange}
+                  >
+                    <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>✏️ Demander un changement de nom</Text>
+                  </TouchableOpacity>
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>Thème de couleur</Text>
+                  <Text style={[styles.cardDesc, { color: C.muted }]}>
+                    Appliqué en temps réel pour tous les visiteurs.
+                  </Text>
+                  {themeUpdating && (
+                    <ActivityIndicator color={C.accent} style={{ marginBottom: 12 }} />
+                  )}
+                  <View style={styles.themeGrid}>
+                    {THEME_ORDER.map((key) => {
+                      const isActive = space?.theme === key;
+                      return (
+                        <TouchableOpacity
+                          key={key}
+                          style={[
+                            styles.themeOption,
+                            {
+                              backgroundColor: C.bg,
+                              borderColor: isActive ? THEME_SWATCHES[key] : C.border,
+                              borderWidth: isActive ? 2 : 1,
+                            },
+                          ]}
+                          onPress={() => handleThemeChange(key)}
+                          disabled={themeUpdating}
+                          activeOpacity={0.75}
+                        >
+                          <View style={[styles.themeSwatch, { backgroundColor: THEME_SWATCHES[key] }]} />
+                          <Text style={[styles.themeLabel, { color: isActive ? "#fff" : C.muted }]}>
+                            {themeLabels[key]}
+                          </Text>
+                          {isActive && (
+                            <Text style={[styles.themeCheck, { color: THEME_SWATCHES[key] }]}>✓</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setEditProfileModal(false)}
+                    style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }]}
+                  >
+                    <Text style={styles.saveNotesBtnText}>Fermer</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── MODAL HISTORIQUE ─────────────────────────────────────────────── */}
+      <Modal visible={historyModal} transparent animationType="slide" onRequestClose={() => setHistoryModal(false)}>
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
+          <View style={styles.overlay}>
+            <TouchableOpacity
+              style={StyleSheet.absoluteFill}
+              activeOpacity={1}
+              onPress={() => setHistoryModal(false)}
+            />
+            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent, maxHeight: SHEET_MAX_HEIGHT }]}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[styles.sheetTitle, { color: "#fff" }]}>🕐 Historique</Text>
+
+                <TextInput
+                  style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text, marginBottom: 16 }]}
+                  placeholder="🔍 Rechercher un mot-clé (toutes rubriques)…"
+                  placeholderTextColor={C.muted}
+                  value={historySearch}
+                  onChangeText={setHistorySearch}
+                />
+
+                {/* Bloc 1 : Infos hospitalières */}
+                <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>🏥 Infos hospitalières</Text>
+                {historyLoading ? (
+                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+                ) : hospitalFieldHistory.length === 0 ? (
+                  <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun changement trouvé.</Text>
+                ) : (
+                  hospitalFieldHistory.map((h) => (
+                    <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                      <Text style={[styles.historyField, { color: "#fff" }]}>
+                        {FIELD_ICONS[h.field_name] ?? "✏️"} {FIELD_LABELS[h.field_name] ?? h.field_name}
+                        {h.new_value ? ` → "${h.new_value}"` : " → (vide)"}
+                      </Text>
+                      {h.old_value != null && (
+                        <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
+                      )}
+                      <Text style={[styles.historyDate, { color: C.muted }]}>
+                        {new Date(h.changed_at).toLocaleString("fr-FR", {
+                          day: "numeric", month: "long", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                  ))
+                )}
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                {/* Bloc 2 : Consignes de visite */}
+                <Text style={[styles.fieldLabel, { color: C.gold }]}>📝 Consignes de visite</Text>
+                {historyLoading ? (
+                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+                ) : visitRulesHistory.length === 0 ? (
+                  <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune modification enregistrée.</Text>
+                ) : (
+                  visitRulesHistory.map((h) => (
+                    <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                      <Text style={[styles.historyField, { color: "#fff" }]}>
+                        {h.new_value ? `→ "${h.new_value}"` : "→ (vide)"}
+                      </Text>
+                      {h.old_value != null && (
+                        <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
+                      )}
+                      <Text style={[styles.historyDate, { color: C.muted }]}>
+                        {new Date(h.changed_at).toLocaleString("fr-FR", {
+                          day: "numeric", month: "long", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        })}
+                      </Text>
+                    </View>
+                  ))
+                )}
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                {/* Bloc 3 : Publications */}
+                <Text style={[styles.fieldLabel, { color: C.gold }]}>📢 Publications</Text>
+                {pubLoading ? (
+                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+                ) : (
+                  <>
+                    <Text style={[styles.historySubGroup, { color: C.muted }]}>📰 Nouvelles du jour ({filteredPubNews.length})</Text>
+                    {filteredPubNews.length === 0 ? (
+                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune nouvelle trouvée.</Text>
+                    ) : (
+                      filteredPubNews.map((n) => (
+                        <View key={n.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{n.content}</Text>
+                          <Text style={[styles.historyDate, { color: C.muted }]}>
+                            {n.author_prenom} {n.author_nom} · {new Date(n.created_at).toLocaleString("fr-FR", {
+                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </Text>
+                        </View>
+                      ))
+                    )}
+
+                    <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>🤝 Entraide — besoins ({filteredPubTasks.length})</Text>
+                    {filteredPubTasks.length === 0 ? (
+                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun besoin trouvé.</Text>
+                    ) : (
+                      filteredPubTasks.map((t) => (
+                        <View key={t.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={1}>
+                            {TASK_CAT_ICONS[t.category]} {t.title}
+                          </Text>
+                          <Text style={[styles.historyDate, { color: C.muted }]}>
+                            {new Date(t.created_at).toLocaleString("fr-FR", {
+                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </Text>
+                        </View>
+                      ))
+                    )}
+
+                    <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>💛 Mur de soutien ({filteredPubMessages.length})</Text>
+                    {filteredPubMessages.length === 0 ? (
+                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun message trouvé.</Text>
+                    ) : (
+                      filteredPubMessages.map((m) => (
+                        <View key={m.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{m.message}</Text>
+                          <Text style={[styles.historyDate, { color: C.muted }]}>
+                            {m.author_prenom} {m.author_nom} · {new Date(m.created_at).toLocaleString("fr-FR", {
+                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                            })}
+                          </Text>
+                        </View>
+                      ))
+                    )}
+                  </>
+                )}
+
+                <TouchableOpacity
+                  onPress={() => setHistoryModal(false)}
+                  style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 16 }]}
+                >
+                  <Text style={styles.saveNotesBtnText}>Fermer</Text>
+                </TouchableOpacity>
+              </ScrollView>
+            </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1327,6 +1914,7 @@ const styles = StyleSheet.create({
   historyField: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, marginBottom: 2 },
   historyOld: { fontFamily: "DM_Sans_400Regular", fontSize: 12, marginBottom: 2, fontStyle: "italic" },
   historyDate: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
+  historySubGroup: { fontFamily: "DM_Sans_700Bold", fontSize: 12, marginBottom: 8 },
 
   // Admin notes
   warningText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, marginBottom: 10 },
@@ -1362,6 +1950,7 @@ const styles = StyleSheet.create({
   hourLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 12, textAlign: "center" },
   hourSep: { fontFamily: "DM_Sans_700Bold", fontSize: 18, marginTop: 20 },
   stepper: { flexDirection: "row", alignItems: "center", gap: 8 },
+  stepperRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 4 },
   stepBtn: { width: 36, height: 36, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   stepBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 18, lineHeight: 20 },
   stepValue: { fontFamily: "DM_Sans_700Bold", fontSize: 16, minWidth: 48, textAlign: "center" },

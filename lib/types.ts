@@ -11,7 +11,18 @@ export interface PatientSpace {
   hospital_sector: string | null;
   hospital_room: string;
   hospital_address: string;
+  hospital_address_line2: string | null;
+  hospital_postal_code: string | null;
+  hospital_city: string | null;
+  hospital_country: string | null;
   hospital_maps_url: string;
+  home_care_mode: boolean;
+  home_address: string | null;
+  home_address_line2: string | null;
+  home_postal_code: string | null;
+  home_city: string | null;
+  home_country: string | null;
+  home_maps_url: string | null;
   visit_rules: string;
   admin_notes: string;
   theme: ThemeKey;
@@ -36,6 +47,8 @@ export interface SlotConfig {
   max_visitors_per_slot: number;
   night_enabled: boolean;
   max_night_visitors: number;
+  night_start_hour: number;
+  night_end_hour: number;
   allowed_weekdays: number[];
   blocked_dates: string[];
 }

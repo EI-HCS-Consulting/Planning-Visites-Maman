@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "rea
 import { useVisitorSpace } from "@/lib/VisitorContext";
 import SpaceHeader from "@/components/SpaceHeader";
 import BookingFlow, { type BookingFlowHandle } from "@/components/BookingFlow";
-import { findNextAvailableNight, toISO, toFrLong } from "@/lib/slotUtils";
+import { findNextAvailableNight, toISO, toFrLong, nightStartSlot } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 import type { Reservation } from "@/lib/types";
 
@@ -38,7 +38,7 @@ export default function VisitorNightsScreen() {
       Alert.alert("Aucune disponibilité", "Aucune nuitée libre dans les 90 prochains jours.");
       return;
     }
-    flowRef.current?.openBooking(next.iso, "18:00");
+    flowRef.current?.openBooking(next.iso, nightStartSlot(slotConfig));
   }
 
   return (

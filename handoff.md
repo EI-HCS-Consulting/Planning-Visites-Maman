@@ -1,37 +1,40 @@
 # Handoff — AvecToi
-_Généré le : 2 juillet 2026, fin de session_
+_Généré le : 3 juillet 2026_
 
 ---
 
 ## 1. Objectif de la session
-Corriger et compléter les fonctionnalités admin : photo patient, règles de visite, écrans Infos, et UX des paramètres.
 
-**État "done" visé :**
-- Photo patient visible dans le rond "Photo du patient" (settings) et dans le centre du logo (SpaceHeader)
-- Règles de visite (horaires, durée, fréquence, jours, dates bloquées) sauvegardées et propagées en temps réel
-- Onglet Infos : consignes auto-générées + texte libre correctement séparés
-- Paramètres : blocs hôpital avec un seul bouton "Enregistrer" chacun
+Débloquer la saisie d'adresse hôpital/domicile (précédemment en attente d'une décision d'architecture Google Places API) et permettre à l'admin de coller un lien Google Maps pour remplir automatiquement nom + adresse — **sans jamais utiliser de clé API Google**, contrainte explicite et répétée du client après discussion des risques de sécurité liés à l'embarquement d'une clé dans une app mobile.
+
+**État "done" visé :** admin colle un lien Google Maps (hôpital), nom + adresse (rue/complément/CP/ville/pays) se remplissent automatiquement ; domicile génère son lien Maps automatiquement depuis l'adresse saisie. → **Atteint et confirmé fonctionnel par l'utilisateur**, y compris pour des adresses hors de France (testé sur un hôpital suisse et un hôpital allemand).
 
 ---
 
 ## 2. État actuel
 
-### Ce qui fonctionne
-- **Photo patient** : upload Storage OK (RLS corrigé session précédente). `settings.tsx` a un `localPhotoUrl` pour affichage immédiat après upload sans attendre Realtime. `SpaceHeader` utilise `icon-sans-512.png` (RGBA confirmé) comme cadre transparent sur la photo. Non testé visuellement sur device.
-- **Migration slot_config** : colonnes `allowed_weekdays` et `blocked_dates` ajoutées en prod (`ARRAY[0..6]` et `[]` par défaut). Migration exécutée.
-- **RLS slot_config** : policy UPDATE ajoutée (était manquante — les sauvegardes retournaient sans erreur mais mettaient à jour 0 lignes).
-- **Realtime slot_config** : SpaceContext et VisitorContext écoutent maintenant `slot_config` UPDATE en plus de `patient_spaces`. `refreshSlotConfig()` exposé dans SpaceContext, appelé immédiatement après sauvegarde dans settings.
-- **Nuitée dans créneaux admin** : bloc nuitée restauré dans `app/(admin)/home/slots.tsx` (en bas de la liste, conditionné sur `slotConfig.night_enabled`).
-- **Calcul des créneaux** : `min_gap_minutes` est maintenant l'**intervalle** entre débuts de créneaux (step direct), plus la somme durée+pause. `0` = dos à dos (step = durée).
-- **Onglet Infos** : "Consignes de visite" = bullets auto-générées depuis `slotConfig`. "Informations" = texte libre `space.visit_rules`.
-- **Settings** : textarea "Consignes de visite / Infos" sauvegarde dans `visit_rules` (corrigé — sauvegardait dans `admin_notes` avant). Blocs hôpital consolidés : 1 bouton par bloc au lieu de 1 par champ.
+### Ce qui fonctionne (livré et confirmé par l'utilisateur)
+- **Décision d'architecture tranchée** : abandon de la piste Google Places API (directe ou via proxy Edge Function) — remplacée par une solution 100% gratuite et sans clé :
+  1. Résolution des liens courts `maps.app.goo.gl` par simple suivi de redirection HTTP (`fetch(url, { method: "HEAD", redirect: "follow" })`).
+  2. Lecture du nom et de l'adresse **directement dans le texte de l'URL Google** (`/maps/place/<nom>,+<rue>,+<CP>+<ville>[,+<pays>]/`), sans appel API.
+  3. Repli sur **OpenStreetMap Nominatim** (géocodage inverse gratuit, sans clé, juste un `User-Agent` requis) uniquement pour les liens qui n'ont que des coordonnées GPS sans texte d'adresse (pin déposé sans fiche).
+- **Adresse structurée** pour hôpital ET domicile : rue / complément / code postal / ville / **pays** (nouveau champ ajouté cette session).
+- **Domicile** : lien Google Maps généré automatiquement depuis l'adresse saisie (pas de champ lien manuel, choix explicite du client).
+- **Hôpital** : champ dédié pour coller un lien Google Maps trouvé sur internet ; au blur du champ, résolution automatique du nom + adresse complète avec spinners de chargement sur les champs concernés et toasts différenciés selon ce qui a été récupéré.
+- **Correction du bug d'adresses étrangères** : le parsing cherchait initialement le "CP + ville" uniquement dans le dernier segment de l'URL, ce qui échouait pour les adresses hors de France où Google ajoute le pays comme segment supplémentaire après "CP Ville" (ex. `..., 8001 Zürich, Suisse`). Corrigé en cherchant ce motif à n'importe quelle position dans les segments, et en traitant tout ce qui suit comme le pays.
+- **`components/SpaceHeader.tsx`** : affichage de l'adresse active (hôpital ou domicile selon `home_care_mode`) sur plusieurs lignes via `addressLines()`, ouverture du lien Maps adapté au mode.
+- **`components/BookingFlow.tsx`** : notes de l'événement calendrier natif utilisent désormais l'adresse structurée complète (avec pays) via `joinAddress()`.
+- **`app/index.tsx`** : logo réel de l'app (`assets/icon.png`) à la place de l'ancien emoji sur l'écran d'accueil.
+- **Migrations exécutées en prod par l'utilisateur** :
+  - `supabase/migrations/20260703_address_details.sql` (colonnes `*_address_line2`, `*_postal_code`, `*_city` pour hôpital et domicile)
+  - `supabase/migrations/20260703_address_country.sql` (colonnes `hospital_country`, `home_country`)
+- **Vérification** : `npx tsc --noEmit` propre (seules erreurs pré-existantes non liées, `lib/notifications.ts` et Edge Functions Deno, subsistent).
 
-### Ce qui est en cours / non vérifié
-- Photo dans le header (SpaceHeader) : logique correcte en code mais non testée sur device Android.
-- `space_field_history` table : migration SQL écrite (`supabase/migrations/20260702_space_field_history.sql`) mais **PAS encore exécutée en prod**. Les boutons "Infos hospitalières" appellent `logFieldChange()` qui écrit dans cette table — les appels vont silencieusement échouer si la table n'existe pas.
+### Ce qui est en cours / non terminé
+Rien de bloquant. Un `Alert.alert` de debug temporaire (`if (__DEV__) Alert.alert("Debug lien Maps", place.debug)`) a été laissé dans `handleHospitalMapsUrlBlur` (`app/(admin)/settings.tsx`) — utile pendant cette session pour diagnostiquer via captures d'écran pourquoi certains liens ne se résolvaient pas (a permis de découvrir que certains liens Google Maps n'ont pas de coordonnées `@lat,lon` du tout, juste un ID de lieu interne). Ne s'affiche qu'en dev, jamais en build de prod (`__DEV__`) — à retirer ou garder selon préférence du client, aucune urgence.
 
-### Dernière action effectuée
-Consolidation des boutons des blocs "Coordonnées de l'hôpital" et "Infos hospitalières" (3 boutons → 1 par bloc, `handleSaveHospitalCoords` et `handleSaveHospitalInfos`).
+### Dernière action effectuée avant le handoff
+Confirmation utilisateur ("c'est fait et ça fonctionne") après exécution de la migration `20260703_address_country.sql` et nouveau test sur les hôpitaux suisse/allemand : CP, ville et pays se remplissent désormais correctement.
 
 ---
 
@@ -39,56 +42,29 @@ Consolidation des boutons des blocs "Coordonnées de l'hôpital" et "Infos hospi
 
 | Fichier | Rôle / modifications |
 |---|---|
-| `app/(admin)/settings.tsx` | Photo : `localPhotoUrl` + `displayPhotoUrl` + `refreshSlotConfig` post-save. Textarea → `visit_rules`. Boutons hôpital consolidés. Label "Consignes de visite / Infos". Fréquence créneaux (pills 0/30/60/90/120 min). |
-| `app/(admin)/home/slots.tsx` | Nuitée restaurée dans la liste journalière. Import `getNightReservation`. |
-| `app/(admin)/home/info.tsx` | `buildSlotRules(slotConfig)` → bullets "Consignes de visite". `visit_rules` → bloc "Informations". |
-| `app/(visitor)/home/info.tsx` | Identique à admin/info.tsx côté visiteur. |
-| `lib/SpaceContext.tsx` | Channel Realtime `slot_config`. `refreshSlotConfig()` exposé dans la valeur de contexte. |
-| `lib/VisitorContext.tsx` | Channel Realtime `slot_config` (visiteur voit les mises à jour admin en temps réel). |
-| `lib/slotUtils.ts` | `generateSlots` : step = `min_gap_minutes > 0 ? min_gap_minutes : slot_duration_minutes`. |
-| `supabase/migrations/20260702_slot_config_visit_rules.sql` | ✅ Exécutée — ajoute `allowed_weekdays` et `blocked_dates` à `slot_config`. |
-| `supabase/migrations/20260702_slot_config_update_policy.sql` | ✅ Exécutée — policy RLS UPDATE sur `slot_config` pour les admins. |
-| `supabase/migrations/20260702_space_field_history.sql` | ⚠️ **NON exécutée** — crée la table `space_field_history` pour l'historique chambre/service/secteur. |
-| `supabase/migrations/20260702_patient_photos_storage_policies.sql` | ✅ Exécutée (session précédente) — policies RLS Storage bucket `patient-photos`. |
+| `lib/types.ts` | `PatientSpace` : ajout `hospital_address_line2/postal_code/city/country`, `home_address_line2/postal_code/city/country`. |
+| `lib/address.ts` | **Nouveau fichier**, cœur de la logique : `googleMapsSearchUrl` (URL Maps sans clé), `joinAddress`/`addressLines` (formatage), `hospitalAddressParts`/`homeAddressParts`/`activeAddressParts`, et toute la résolution de lien collé (`resolvePlaceFromMapsUrl` + helpers : parsing des segments `/maps/place/...`, extraction GPS en repli, décodage des URL de consentement RGPD imbriquées, géocodage inverse Nominatim). |
+| `components/SpaceHeader.tsx` | Affichage adresse multi-lignes (`addressLines`), ouverture du lien Maps adapté au mode hôpital/domicile. |
+| `components/BookingFlow.tsx` | Notes de l'événement calendrier natif via `joinAddress(activeAddressParts(space))`. |
+| `app/index.tsx` | Logo réel (`assets/icon.png`) sur l'écran d'accueil. |
+| `app/(admin)/settings.tsx` | Blocs "Coordonnées de l'hôpital" et "Coordonnées" (domicile) : champs rue/complément/CP/ville/**pays**, `handleHospitalMapsUrlBlur` (auto-remplissage), `handleSaveHospitalCoords`/`handleSaveHomeCoords`. |
+| `supabase/migrations/20260703_address_details.sql` | ✅ Exécutée — colonnes adresse détaillée (hôpital + domicile). |
+| `supabase/migrations/20260703_address_country.sql` | ✅ Exécutée — colonnes `hospital_country`, `home_country`. |
 
 ---
 
 ## 4. Ce qui a échoué
 
-- **Supabase CLI `db push`** : ne pas utiliser — plusieurs fichiers de migration partagent le même préfixe de date (`20260616_*`), ce qui cause une erreur "duplicate version key". Toujours passer par l'API Management Supabase pour exécuter les migrations.
-  - Endpoint : `POST https://api.supabase.com/v1/projects/flmslcdzjuifkivmzins/database/query`
-  - Token : voir gestionnaire de mots de passe / ne jamais committer ce token
-
-- **Save slot_config silencieux** : avant l'ajout de la policy UPDATE, les `.update()` retournaient `error = null` mais ne modifiaient rien (RLS bloque silencieusement). Si un futur champ ne se sauvegarde pas, vérifier `pg_policies` en premier.
-
-- **`admin_notes` vs `visit_rules`** : la textarea "Consignes de visite" sauvegardait dans `admin_notes` alors que l'onglet Infos lisait `visit_rules`. Corrigé. Les données existantes dans `admin_notes` ne sont plus affichées nulle part. Ne pas confondre les deux à l'avenir.
-
-- **Calcul créneaux — rupture de compatibilité** : avant, `min_gap_minutes` = pause après visite (step = durée + pause). Maintenant, `min_gap_minutes` = intervalle total (step direct). Les espaces existants avec `min_gap_minutes > 0` ont un intervalle potentiellement inattendu. L'admin doit reconfigurer depuis Paramètres → Règles de visite.
+- **Google Places API (options A directe et B proxy Edge Function)** : écartées d'entrée par le client pour des raisons de sécurité de clé API embarquée dans une app mobile. Ne pas retenter cette piste sans revalidation explicite.
+- **Lien Maps auto-généré pour l'hôpital aussi** : une première approche générait automatiquement le lien Maps pour hôpital ET domicile — le client a demandé de revenir à un champ de collage manuel pour l'hôpital uniquement (l'adresse officielle Google d'un hôpital est plus fiable que la recherche générée), en gardant l'auto-génération pour le domicile seul.
+- **Extraction du nom incluant l'adresse complète** : la regex initiale capturait tout le segment `/maps/place/<...>/` jusqu'au premier `/`, donnant un nom du type "Hôpital X, Bd Y, 38700 Ville" — corrigé en découpant sur les virgules et en répartissant nom / rue / CP+ville / pays.
+- **Dépendance systématique aux coordonnées GPS** : l'implémentation intermédiaire appelait Nominatim via les coordonnées `@lat,lon` de l'URL, mais de nombreux liens Google Maps (ceux avec un ID de lieu interne type `!1s0x478af...`) n'ont pas ce segment du tout — l'adresse ne se remplissait jamais. Diagnostiqué grâce à un `Alert.alert` de debug (le terminal/PowerShell du client n'affichait aucun log malgré plusieurs tentatives). Corrigé en lisant l'adresse texte directement dans l'URL en priorité, Nominatim n'étant qu'un repli.
+- **Parsing CP/ville supposant "dernier segment = CP Ville"** : cassait pour les adresses hors France (pays ajouté par Google comme segment final après "CP Ville"). Corrigé en cherchant ce motif n'importe où dans les segments plutôt qu'en dernière position.
 
 ---
 
 ## 5. Prochaine étape
 
-**Action immédiate — critique :**
-
-Exécuter `supabase/migrations/20260702_space_field_history.sql` en prod via l'API Management (PowerShell) :
-
-```powershell
-$sql = Get-Content "supabase/migrations/20260702_space_field_history.sql" -Raw
-$body = @{ query = $sql } | ConvertTo-Json
-Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/flmslcdzjuifkivmzins/database/query" `
-  -Method POST `
-  -Headers @{ "Authorization" = "Bearer $env:SUPABASE_ACCESS_TOKEN"; "Content-Type" = "application/json" } `
-  -Body $body
-```
-
-Sans cette migration, `handleSaveHospitalInfos` échoue silencieusement sur le `logFieldChange`.
-
-**À tester sur device :**
-1. Upload photo patient → vérifier apparition dans le rond (settings) et dans le logo (header) sans rechargement.
-2. Modifier horaires de visite → vérifier propagation immédiate dans Créneaux et Info sans rechargement.
-3. Vérifier que `min_gap_minutes = 0` donne des créneaux dos à dos, et que `min_gap_minutes = 60` donne 1 créneau/heure.
-
-**Améliorations optionnelles identifiées :**
-- Ajouter une validation dans settings : avertir si l'intervalle (`slotGap`) est inférieur à la durée (`slotDuration`) — les visites se chevaucheraient.
-- Export PDF de l'historique des changements hospitaliers (structure `space_field_history` prête, feature déférée).
+Aucune action bloquante — fonctionnalité validée par le client. Pistes pour une prochaine session, si le client souhaite continuer sur ce sujet :
+1. Décider si le `Alert.alert` de debug (`__DEV__` uniquement, dans `handleHospitalMapsUrlBlur`) doit être retiré maintenant que le flux est stable, ou conservé comme outil de diagnostic pour de futurs formats de lien.
+2. Revenir à la liste de priorités V1 (voir `CLAUDE.md` du projet) pour identifier la prochaine fonctionnalité à traiter — ce chantier adresse/Maps était une demande ad hoc, hors de cette liste initiale.

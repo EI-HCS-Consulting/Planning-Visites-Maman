@@ -30,7 +30,7 @@ function buildSlotRules(cfg: SlotConfig): string[] {
       .map((d) => WEEKDAY_FR[d]);
     lines.push(`Jours autorisés : ${labels.join(", ")}`);
   }
-  if (cfg.night_enabled) lines.push("Nuitées possibles (18h → 11h)");
+  if (cfg.night_enabled) lines.push(`Nuitées possibles (${cfg.night_start_hour ?? 19}h → ${cfg.night_end_hour ?? 8}h)`);
   if (cfg.blocked_dates && cfg.blocked_dates.length > 0) {
     const formatted = cfg.blocked_dates
       .map((iso) =>

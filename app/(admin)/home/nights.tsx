@@ -2,7 +2,7 @@ import { useRef, useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert } from "react-native";
 import { useSpace } from "@/lib/SpaceContext";
 import { supabase } from "@/lib/supabase";
-import { findNextAvailableNight, toISO, toFrLong } from "@/lib/slotUtils";
+import { findNextAvailableNight, toISO, toFrLong, nightStartSlot } from "@/lib/slotUtils";
 import { themes } from "@/lib/themes";
 import SpaceHeader from "@/components/SpaceHeader";
 import AdminAddReservation, { type AdminAddReservationHandle } from "@/components/AdminAddReservation";
@@ -34,7 +34,7 @@ export default function AdminNightsScreen() {
       Alert.alert("Aucune disponibilité", "Aucune nuitée libre dans les 90 prochains jours.");
       return;
     }
-    addRef.current?.open(next.iso, "18:00", "Nuit");
+    addRef.current?.open(next.iso, nightStartSlot(slotConfig!), "Nuit");
   }
 
   function handleDelete(r: Reservation) {

@@ -30,6 +30,7 @@ export default function VisitorCalendarScreen() {
 
   const monthDays = getDaysInMonth(calMonth.year, calMonth.month);
   const firstDow = (new Date(calMonth.year, calMonth.month, 1).getDay() + 6) % 7;
+  const trailingFillers = (7 - ((firstDow + monthDays.length) % 7)) % 7;
   const monthName = new Date(calMonth.year, calMonth.month, 1)
     .toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
 
@@ -141,13 +142,16 @@ export default function VisitorCalendarScreen() {
                 disabled={isPast}
                 activeOpacity={0.7}
               >
-                <Text style={[styles.cellDate, { color: isSelected ? "#fff" : isToday ? C.gold : C.text }]}>
-                  {day.getDate()}
-                </Text>
-                <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                <View style={styles.cellInner}>
+                  <Text style={[styles.cellDate, { color: isSelected ? "#fff" : isToday ? C.gold : C.text }]}>
+                    {day.getDate()}
+                  </Text>
+                  <View style={[styles.dot, { backgroundColor: dotColor }]} />
+                </View>
               </TouchableOpacity>
             );
           })}
+          {Array(trailingFillers).fill(null).map((_, i) => <View key={`t${i}`} style={styles.cell} />)}
         </View>
 
         {/* Legend */}
@@ -206,33 +210,31 @@ export default function VisitorCalendarScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  scroll: { padding: 16, paddingBottom: 32 },
-  nextDispoBtn: { borderRadius: 12, paddingVertical: 14, alignItems: "center", marginBottom: 20 },
+  scroll: { padding: 16, paddingBottom: 20 },
+  nextDispoBtn: { borderRadius: 12, paddingVertical: 11, alignItems: "center", marginBottom: 12 },
   nextDispoText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
-  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  monthNav: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 10 },
   monthName: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 17, textTransform: "capitalize" },
   navBtn: { borderWidth: 1, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 14 },
   navBtnText: { fontSize: 18, fontWeight: "600" },
-  dayLabels: { flexDirection: "row", marginBottom: 6 },
-  dayLabel: { flex: 1, textAlign: "center", fontFamily: "DM_Sans_600SemiBold", fontSize: 11 },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: 3, marginBottom: 16 },
+  dayLabels: { flexDirection: "row", justifyContent: "center", gap: 3, marginBottom: 4 },
+  dayLabel: { width: "13.5%", textAlign: "center", fontFamily: "DM_Sans_600SemiBold", fontSize: 10 },
+  grid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "center", gap: 3, marginBottom: 10 },
   cell: {
-    width: "13.28%",
+    width: "13.5%",
     aspectRatio: 1,
     borderRadius: 8,
     borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: 4,
   },
-  cellDate: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
-  dot: { width: 5, height: 5, borderRadius: 3, marginTop: 3 },
+  cellInner: { flex: 1, width: "100%", alignItems: "center", justifyContent: "center", gap: 2 },
+  cellDate: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, textAlignVertical: "center", includeFontPadding: false },
+  dot: { width: 4, height: 4, borderRadius: 2 },
   legend: { flexDirection: "row", justifyContent: "center", gap: 20 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: { fontFamily: "DM_Sans_400Regular", fontSize: 11 },
 
-  nightsBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 20 },
+  nightsBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 9, alignItems: "center", marginTop: 10 },
   nightsBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
 
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.82)", justifyContent: "center", alignItems: "center", padding: 20 },

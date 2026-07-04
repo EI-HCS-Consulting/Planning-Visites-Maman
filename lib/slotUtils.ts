@@ -1,5 +1,25 @@
 import type { SlotConfig, Reservation } from "./types";
 
+// Défauts de secours tant que la migration night_start_hour/night_end_hour
+// n'a pas tourné en prod (colonnes absentes -> valeurs undefined en DB) —
+// on ne doit jamais afficher "undefined"/"NaN" à l'écran.
+const NIGHT_START_FALLBACK = 19;
+const NIGHT_END_FALLBACK = 8;
+
+// Heure de début de nuitée au format "HH:00", utilisée comme "créneau" de
+// départ pour le calcul de l'événement calendrier d'une nuitée.
+export function nightStartSlot(config: SlotConfig): string {
+  const h = config.night_start_hour ?? NIGHT_START_FALLBACK;
+  return `${String(h).padStart(2, "0")}:00`;
+}
+
+// Libellé d'affichage "19h → 8h" pour une plage de nuitée configurée.
+export function nightRangeLabel(config: SlotConfig): string {
+  const start = config.night_start_hour ?? NIGHT_START_FALLBACK;
+  const end = config.night_end_hour ?? NIGHT_END_FALLBACK;
+  return `${start}h → ${end}h`;
+}
+
 export function generateSlots(config: SlotConfig): string[] {
   const slots: string[] = [];
   const startMin = config.visit_start_hour * 60;
