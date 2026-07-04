@@ -3,6 +3,7 @@ import {
   View, Text, TouchableOpacity, ScrollView, StyleSheet,
   Alert, ActivityIndicator, Image, TextInput, Switch,
   Linking, Modal, KeyboardAvoidingView, Platform, Dimensions,
+  PanResponder, Animated,
 } from "react-native";
 
 // Percentages ("85%") on the sheet don't resolve reliably since its parent
@@ -68,6 +69,20 @@ const TASK_CAT_ICONS: Record<Task["category"], string> = {
   autre: "💡",
 };
 
+// ─── Grille de réglages (remplace le long défilement par des tuiles) ─────────
+type SectionKey = "soin" | "coord" | "hosp" | "consignes" | "regles" | "nuitees" | "hist" | "rgpd";
+
+const SECTION_META: Record<SectionKey, { icon: string; label: string; hint: string }> = {
+  soin: { icon: "🔄", label: "Mode de soin", hint: "Hôpital ou domicile" },
+  coord: { icon: "📍", label: "Coordonnées", hint: "Adresse, lien Maps" },
+  hosp: { icon: "🏥", label: "Infos hospitalières", hint: "Chambre, service, secteur" },
+  consignes: { icon: "📝", label: "Consignes de visite", hint: "Message pour les visiteurs" },
+  regles: { icon: "⏰", label: "Règles de visite", hint: "Horaires, durée, jours" },
+  nuitees: { icon: "🌙", label: "Nuitées", hint: "Plage horaire de nuit" },
+  hist: { icon: "🕐", label: "Historique", hint: "Modifications passées" },
+  rgpd: { icon: "🔒", label: "Conservation des données", hint: "Suppression automatique" },
+};
+
 export default function SettingsScreen() {
   const router = useRouter();
   const { space, slotConfig, loading, hasSpace, refreshSlotConfig } = useSpace();
@@ -80,6 +95,9 @@ export default function SettingsScreen() {
   const displayPhotoUrl = localPhotoUrl !== undefined ? localPhotoUrl : (space?.patient_photo_url ?? null);
   const [prolonging, setProlonging] = useState(false);
   const [toast, setToast] = useState("");
+
+  // Section active de la grille de réglages (null = grille de tuiles affichée)
+  const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
 
   // Admin notes
   const notesInit = useRef(false);
@@ -163,8 +181,7 @@ export default function SettingsScreen() {
   const [fieldHistory, setFieldHistory] = useState<FieldHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // Modal Historique (infos hospitalières + consignes + publications)
-  const [historyModal, setHistoryModal] = useState(false);
+  // Historique (infos hospitalières + consignes + publications) — affiché en tuile
   const [historySearch, setHistorySearch] = useState("");
   const [pubLoading, setPubLoading] = useState(false);
   const [pubNews, setPubNews] = useState<NewsEntry[]>([]);
@@ -193,10 +210,49 @@ export default function SettingsScreen() {
   const [visitStartHour, setVisitStartHour] = useState(9);
   const [visitEndHour, setVisitEndHour] = useState(20);
   const [slotDuration, setSlotDuration] = useState(60);
-  const [slotGap, setSlotGap] = useState(0);
-  const [gapIsCustom, setGapIsCustom] = useState(false);
-  const [gapCustomHours, setGapCustomHours] = useState(0);
-  const [gapCustomMinutes, setGapCustomMinutes] = useState(0);
+  const [slotGap, setSlotGap] = useState(5);
+  const [slotGapDragging, setSlotGapDragging] = useState(false);
+  const slotGapScale = useRef(new Animated.Value(1)).current;
+  const slotGapDragSteps = useRef(0);
+  const slotGapPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 2,
+      onPanResponderGrant: () => {
+        slotGapDragSteps.current = 0;
+        setSlotGapDragging(true);
+        Animated.spring(slotGapScale, { toValue: 1.12, friction: 5, useNativeDriver: true }).start();
+      },
+      onPanResponderMove: (_, g) => {
+        const steps = Math.trunc(-g.dy / 12);
+        const delta = steps - slotGapDragSteps.current;
+        if (delta !== 0) {
+          slotGapDragSteps.current = steps;
+          setSlotGap((v) => Math.min(240, Math.max(5, v + delta * 5)));
+        }
+      },
+      onPanResponderRelease: () => {
+        setSlotGapDragging(false);
+        Animated.spring(slotGapScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+      },
+      onPanResponderTerminate: () => {
+        setSlotGapDragging(false);
+        Animated.spring(slotGapScale, { toValue: 1, friction: 5, useNativeDriver: true }).start();
+      },
+    })
+  ).current;
+  const [gapIncludesDuration, setGapIncludesDuration] = useState(false);
+  const chevronBounce = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(chevronBounce, { toValue: 1, duration: 700, useNativeDriver: true }),
+        Animated.timing(chevronBounce, { toValue: 0, duration: 700, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
   const [maxVisitors, setMaxVisitors] = useState(2);
   const [allowedWeekdays, setAllowedWeekdays] = useState<number[]>([0,1,2,3,4,5,6]);
   const [blockedDates, setBlockedDates] = useState<string[]>([]);
@@ -207,14 +263,8 @@ export default function SettingsScreen() {
       setVisitStartHour(slotConfig.visit_start_hour);
       setVisitEndHour(slotConfig.visit_end_hour);
       setSlotDuration(slotConfig.slot_duration_minutes);
-      const gap = slotConfig.min_gap_minutes || 0;
-      setSlotGap(gap);
-      const presets = [0, 15, 30, 60, 120];
-      if (!presets.includes(gap)) {
-        setGapIsCustom(true);
-        setGapCustomHours(Math.floor(gap / 60));
-        setGapCustomMinutes(gap % 60);
-      }
+      setSlotGap(Math.max(5, slotConfig.min_gap_minutes || 0));
+      setGapIncludesDuration(slotConfig.gap_includes_duration ?? false);
       setMaxVisitors(slotConfig.max_visitors_per_slot);
       setAllowedWeekdays(slotConfig.allowed_weekdays ?? [0,1,2,3,4,5,6]);
       setBlockedDates(slotConfig.blocked_dates ?? []);
@@ -260,11 +310,13 @@ export default function SettingsScreen() {
     setPubLoading(false);
   }
 
-  function handleOpenHistory() {
-    setHistorySearch("");
-    setHistoryModal(true);
-    loadHistory();
-    loadPublicationsHistory();
+  function openSection(key: SectionKey) {
+    if (key === "hist") {
+      setHistorySearch("");
+      loadHistory();
+      loadPublicationsHistory();
+    }
+    setActiveSection(key);
   }
 
   function matchesHistoryQuery(...values: (string | null | undefined)[]): boolean {
@@ -504,6 +556,7 @@ export default function SettingsScreen() {
     const { error: e2 } = await supabase.from("slot_config").update({
       allowed_weekdays: allowedWeekdays,
       blocked_dates: blockedDates,
+      gap_includes_duration: gapIncludesDuration,
     }).eq("id", slotConfig.id);
 
     setSlotRulesSaving(false);
@@ -676,7 +729,7 @@ export default function SettingsScreen() {
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => router.replace("/(admin)/account")} style={styles.backBtn}>
           <Text style={[styles.backBtnText, { color: C.muted }]}>← Compte</Text>
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: "#fff" }]}>⚙️ Paramètres</Text>
@@ -694,21 +747,58 @@ export default function SettingsScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.patientName, { color: "#fff" }]}>{space.patient_firstname} {space.patient_lastname}</Text>
                   <Text style={[styles.patientHospital, { color: C.muted }]}>
-                    {space.home_care_mode
-                      ? "🏠 Soin à domicile"
-                      : `${space.hospital_name}${space.hospital_room ? ` · ${space.hospital_room}` : ""}`}
+                    {space.home_care_mode ? "🏠 Soin à domicile" : space.hospital_name}
                   </Text>
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.saveNotesBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: C.border }]}
+                style={[styles.saveNotesBtn, { backgroundColor: C.accent, borderWidth: 1, borderColor: C.accent }]}
                 onPress={() => setEditProfileModal(true)}
               >
-                <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>✏️ Modifier le profil patient</Text>
+                <Text style={[styles.saveNotesBtnText, { color: "#fff" }]}>Profil Patient</Text>
               </TouchableOpacity>
             </View>
 
+            {/* ── Grille de tuiles des réglages ─────────────────────────────── */}
+            {activeSection === null && (
+              <View style={styles.tileGrid}>
+                {(
+                  [
+                    "soin",
+                    "coord",
+                    ...(!space.home_care_mode ? (["hosp"] as const) : []),
+                    "consignes",
+                    ...(slotConfig ? (["regles", "nuitees"] as const) : []),
+                    "hist",
+                    "rgpd",
+                  ] as SectionKey[]
+                ).map((key) => (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.tile, { backgroundColor: C.card, borderColor: C.border }]}
+                    onPress={() => openSection(key)}
+                    activeOpacity={0.8}
+                  >
+                    <View style={[styles.tileIcon, { backgroundColor: `${C.accent}22` }]}>
+                      <Text style={styles.tileIconText}>{SECTION_META[key].icon}</Text>
+                    </View>
+                    <Text style={[styles.tileLabel, { color: "#fff" }]}>{SECTION_META[key].label}</Text>
+                    <Text style={[styles.tileHint, { color: C.muted }]}>{SECTION_META[key].hint}</Text>
+                    <Text style={[styles.tileChevron, { color: C.muted }]}>›</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            {activeSection !== null && (
+              <TouchableOpacity style={styles.backToGrid} onPress={() => setActiveSection(null)} activeOpacity={0.7}>
+                <Text style={[styles.backToGridText, { color: C.accent }]}>← Retour aux réglages</Text>
+              </TouchableOpacity>
+            )}
+
             {/* ── Section : Mode de soin ────────────────────────────────────── */}
+            {activeSection === "soin" && (
+            <>
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Mode de soin</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <View style={styles.nightRow}>
@@ -733,8 +823,11 @@ export default function SettingsScreen() {
                 }
               </View>
             </View>
+            </>
+            )}
 
-            {space.home_care_mode ? (
+            {activeSection === "coord" && (
+            space.home_care_mode ? (
               <>
                 {/* ── Section : Coordonnées (domicile) ─────────────────────── */}
                 <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées</Text>
@@ -807,7 +900,7 @@ export default function SettingsScreen() {
             ) : (
               <>
                 {/* ── Section : Coordonnées de l'hôpital ───────────────────── */}
-                <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées de l'hôpital</Text>
+                <Text style={[styles.sectionTitle, { color: C.gold }]}>Coordonnées</Text>
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                   <Text style={[styles.cardDesc, { color: C.muted }]}>Colle le lien Google Maps trouvé sur internet — le nom et l'adresse se remplissent automatiquement en dessous (à vérifier, l'adresse peut être approximative).</Text>
 
@@ -914,10 +1007,11 @@ export default function SettingsScreen() {
                   </TouchableOpacity>
                 </View>
               </>
+            )
             )}
 
             {/* ── Section : Infos hospitalières ─────────────────────────────── */}
-            {!space.home_care_mode && (
+            {activeSection === "hosp" && !space.home_care_mode && (
               <>
                 <Text style={[styles.sectionTitle, { color: C.gold }]}>Infos hospitalières</Text>
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -975,6 +1069,8 @@ export default function SettingsScreen() {
             )}
 
             {/* ── Section : Consignes de visite / Infos ─────────────────────── */}
+            {activeSection === "consignes" && (
+            <>
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Consignes de visite / Infos</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.cardDesc, { color: C.muted }]}>
@@ -1004,9 +1100,11 @@ export default function SettingsScreen() {
                 }
               </TouchableOpacity>
             </View>
+            </>
+            )}
 
             {/* ── Section : Règles de visite ──────────────────────────────────── */}
-            {slotConfig && (
+            {activeSection === "regles" && slotConfig && (
               <>
                 <Text style={[styles.sectionTitle, { color: C.gold }]}>Règles de visite</Text>
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -1057,89 +1155,103 @@ export default function SettingsScreen() {
 
                   {/* Durée d'une visite */}
                   <Text style={[styles.fieldLabel, { color: C.gold }]}>⏱ Durée d'une visite</Text>
-                  <View style={styles.pillRow}>
-                    {[20, 30, 45, 60, 90, 120].map((min) => (
-                      <TouchableOpacity
-                        key={min}
-                        onPress={() => setSlotDuration(min)}
-                        style={[styles.pill, { borderColor: slotDuration === min ? C.accent : C.border, backgroundColor: slotDuration === min ? C.accent : "transparent" }]}
-                      >
-                        <Text style={[styles.pillText, { color: slotDuration === min ? "#fff" : C.muted }]}>
-                          {min < 60 ? `${min} min` : `${min / 60}h${min % 60 ? (min % 60) : ""}`}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
+                  <View style={styles.stepper}>
+                    <TouchableOpacity
+                      style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                      onPress={() => setSlotDuration((d) => Math.max(5, d - 5))}
+                    >
+                      <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.stepValue, { color: "#fff" }]}>
+                      {slotDuration < 60 ? `${slotDuration} min` : `${Math.floor(slotDuration / 60)}h${slotDuration % 60 ? slotDuration % 60 : ""}`}
+                    </Text>
+                    <TouchableOpacity
+                      style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                      onPress={() => setSlotDuration((d) => Math.min(240, d + 5))}
+                    >
+                      <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
+                    </TouchableOpacity>
                   </View>
 
                   <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
 
-                  {/* Fréquence des créneaux */}
-                  <Text style={[styles.fieldLabel, { color: C.gold }]}>🔄 Un créneau toutes les</Text>
-                  <View style={styles.pillRow}>
-                    {([{ label: "Dos à dos", val: 0 }, { label: "30 min", val: 30 }, { label: "1h", val: 60 }, { label: "1h30", val: 90 }, { label: "2h", val: 120 }] as { label: string; val: number }[]).map(({ label, val }) => {
-                      const active = !gapIsCustom && slotGap === val;
-                      return (
-                        <TouchableOpacity
-                          key={val}
-                          onPress={() => { setSlotGap(val); setGapIsCustom(false); }}
-                          style={[styles.pill, { borderColor: active ? C.accent : C.border, backgroundColor: active ? C.accent : "transparent" }]}
-                        >
-                          <Text style={[styles.pillText, { color: active ? "#fff" : C.muted }]}>{label}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  {/* Intervalle entre les créneaux */}
+                  <Text style={[styles.fieldLabel, { color: C.gold }]}>⏲ Intervalle entre deux créneaux</Text>
+                  <View style={styles.stepper}>
                     <TouchableOpacity
-                      onPress={() => {
-                        setGapIsCustom(true);
-                        setGapCustomHours(Math.floor(slotGap / 60));
-                        setGapCustomMinutes(slotGap % 60);
-                      }}
-                      style={[styles.pill, { borderColor: gapIsCustom ? C.accent : C.border, backgroundColor: gapIsCustom ? C.accent : "transparent" }]}
+                      style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                      onPress={() => setSlotGap((g) => Math.max(5, g - 5))}
                     >
-                      <Text style={[styles.pillText, { color: gapIsCustom ? "#fff" : C.muted }]}>Personnalisée</Text>
+                      <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
+                    </TouchableOpacity>
+                    <Animated.View
+                      {...slotGapPanResponder.panHandlers}
+                      style={[
+                        styles.scrubValue,
+                        {
+                          backgroundColor: slotGapDragging ? `${C.accent}33` : C.bg,
+                          borderColor: slotGapDragging ? C.accent : C.border,
+                          transform: [{ scale: slotGapScale }],
+                        },
+                      ]}
+                    >
+                      <Animated.Text
+                        style={[
+                          styles.scrubChevron,
+                          { color: slotGapDragging ? C.accent : C.gold, transform: [{ translateY: chevronBounce.interpolate({ inputRange: [0, 1], outputRange: [0, -3] }) }] },
+                        ]}
+                      >
+                        ⌃
+                      </Animated.Text>
+                      <Text style={[styles.stepValue, { color: "#fff", marginVertical: 0 }]}>
+                        {slotGap < 60 ? `${slotGap} min` : `${Math.floor(slotGap / 60)}h${slotGap % 60 ? slotGap % 60 : ""}`}
+                      </Text>
+                      <Animated.Text
+                        style={[
+                          styles.scrubChevron,
+                          { color: slotGapDragging ? C.accent : C.gold, transform: [{ translateY: chevronBounce.interpolate({ inputRange: [0, 1], outputRange: [0, 3] }) }] },
+                        ]}
+                      >
+                        ⌄
+                      </Animated.Text>
+                    </Animated.View>
+                    <TouchableOpacity
+                      style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
+                      onPress={() => setSlotGap((g) => Math.min(240, g + 5))}
+                    >
+                      <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
                     </TouchableOpacity>
                   </View>
-                  {gapIsCustom && (
-                    <View style={styles.hourRow}>
-                      <View style={styles.hourBlock}>
-                        <Text style={[styles.hourLabel, { color: C.muted }]}>Heures</Text>
-                        <View style={styles.stepper}>
-                          <TouchableOpacity
-                            style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
-                            onPress={() => { const h = Math.max(0, gapCustomHours - 1); setGapCustomHours(h); setSlotGap(h * 60 + gapCustomMinutes); }}
-                          >
-                            <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={[styles.stepValue, { color: "#fff" }]}>{gapCustomHours}h</Text>
-                          <TouchableOpacity
-                            style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
-                            onPress={() => { const h = Math.min(8, gapCustomHours + 1); setGapCustomHours(h); setSlotGap(h * 60 + gapCustomMinutes); }}
-                          >
-                            <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
-                      <Text style={[styles.hourSep, { color: C.muted }]}>+</Text>
-                      <View style={styles.hourBlock}>
-                        <Text style={[styles.hourLabel, { color: C.muted }]}>Minutes</Text>
-                        <View style={styles.stepper}>
-                          <TouchableOpacity
-                            style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
-                            onPress={() => { const m = Math.max(0, gapCustomMinutes - 15); setGapCustomMinutes(m); setSlotGap(gapCustomHours * 60 + m); }}
-                          >
-                            <Text style={[styles.stepBtnText, { color: C.text }]}>−</Text>
-                          </TouchableOpacity>
-                          <Text style={[styles.stepValue, { color: "#fff" }]}>{String(gapCustomMinutes).padStart(2, "0")} min</Text>
-                          <TouchableOpacity
-                            style={[styles.stepBtn, { backgroundColor: C.bg, borderColor: C.border }]}
-                            onPress={() => { const m = Math.min(45, gapCustomMinutes + 15); setGapCustomMinutes(m); setSlotGap(gapCustomHours * 60 + m); }}
-                          >
-                            <Text style={[styles.stepBtnText, { color: C.text }]}>+</Text>
-                          </TouchableOpacity>
-                        </View>
-                      </View>
+
+                  <View style={[styles.nightRow, { marginTop: 12 }]}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.nightLabel, { color: "#fff" }]}>Ajouter la durée de visite à l'intervalle</Text>
+                      <Text style={[styles.nightDesc, { color: C.muted }]}>
+                        {gapIncludesDuration
+                          ? `Ex. : visite de ${slotDuration} min + ${slotGap} min d'intervalle → créneau suivant ${slotDuration + slotGap} min plus tard.`
+                          : `Actuellement, l'intervalle (${slotGap} min) est le seul écart entre deux créneaux, quelle que soit la durée de visite.`}
+                      </Text>
                     </View>
-                  )}
+                    <Switch
+                      value={gapIncludesDuration}
+                      onValueChange={setGapIncludesDuration}
+                      trackColor={{ false: C.border, true: C.accent }}
+                      thumbColor="#fff"
+                    />
+                  </View>
+
+                  <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                  {/* Résumé des créneaux générés */}
+                  <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
+                    {`Créneaux générés : ${(() => {
+                      const step = gapIncludesDuration ? slotDuration + slotGap : (slotGap > 0 ? slotGap : slotDuration);
+                      return Array.from({ length: Math.max(0, Math.floor((visitEndHour * 60 - visitStartHour * 60) / step)) }).map((_, i) => {
+                        const m = visitStartHour * 60 + i * step;
+                        return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+                      }).join(" · ") || "Aucun — vérifiez les horaires.";
+                    })()}`}
+                  </Text>
 
                   <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
 
@@ -1220,17 +1332,6 @@ export default function SettingsScreen() {
 
                   <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
 
-                  {/* Résumé des créneaux générés */}
-                  <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
-                    {`Créneaux générés : ${(() => {
-                      const step = slotGap > 0 ? slotGap : slotDuration;
-                      return Array.from({ length: Math.max(0, Math.floor((visitEndHour * 60 - visitStartHour * 60) / step)) }).map((_, i) => {
-                        const m = visitStartHour * 60 + i * step;
-                        return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-                      }).join(" · ") || "Aucun — vérifiez les horaires.";
-                    })()}`}
-                  </Text>
-
                   <TouchableOpacity
                     style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 8 }, slotRulesSaving && { opacity: 0.6 }]}
                     onPress={handleSaveSlotRules}
@@ -1246,7 +1347,7 @@ export default function SettingsScreen() {
             )}
 
             {/* ── Section : Nuitées ─────────────────────────────────────────── */}
-            {slotConfig && (
+            {activeSection === "nuitees" && slotConfig && (
               <>
                 <Text style={[styles.sectionTitle, { color: C.gold }]}>Nuitées</Text>
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
@@ -1338,25 +1439,136 @@ export default function SettingsScreen() {
         )}
 
         {/* ── Section : Historique ─────────────────────────────────────── */}
-        {hasSpace && space && (
+        {hasSpace && space && activeSection === "hist" && (
           <>
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Historique</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
-                Infos hospitalières, consignes de visite et publications de l'espace.
-              </Text>
-              <TouchableOpacity
-                style={[styles.saveNotesBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: C.border }]}
-                onPress={handleOpenHistory}
-              >
-                <Text style={[styles.saveNotesBtnText, { color: C.muted }]}>🕐 Voir l'historique</Text>
-              </TouchableOpacity>
+              <TextInput
+                style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text, marginBottom: 16 }]}
+                placeholder="🔍 Rechercher un mot-clé (toutes rubriques)…"
+                placeholderTextColor={C.muted}
+                value={historySearch}
+                onChangeText={setHistorySearch}
+              />
+
+              {/* Bloc 1 : Infos hospitalières */}
+              <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>🏥 Infos hospitalières</Text>
+              {historyLoading ? (
+                <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+              ) : hospitalFieldHistory.length === 0 ? (
+                <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun changement trouvé.</Text>
+              ) : (
+                hospitalFieldHistory.map((h) => (
+                  <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                    <Text style={[styles.historyField, { color: "#fff" }]}>
+                      {FIELD_ICONS[h.field_name] ?? "✏️"} {FIELD_LABELS[h.field_name] ?? h.field_name}
+                      {h.new_value ? ` → "${h.new_value}"` : " → (vide)"}
+                    </Text>
+                    {h.old_value != null && (
+                      <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
+                    )}
+                    <Text style={[styles.historyDate, { color: C.muted }]}>
+                      {new Date(h.changed_at).toLocaleString("fr-FR", {
+                        day: "numeric", month: "long", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+                ))
+              )}
+
+              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+              {/* Bloc 2 : Consignes de visite */}
+              <Text style={[styles.fieldLabel, { color: C.gold }]}>📝 Consignes de visite</Text>
+              {historyLoading ? (
+                <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+              ) : visitRulesHistory.length === 0 ? (
+                <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune modification enregistrée.</Text>
+              ) : (
+                visitRulesHistory.map((h) => (
+                  <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                    <Text style={[styles.historyField, { color: "#fff" }]}>
+                      {h.new_value ? `→ "${h.new_value}"` : "→ (vide)"}
+                    </Text>
+                    {h.old_value != null && (
+                      <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
+                    )}
+                    <Text style={[styles.historyDate, { color: C.muted }]}>
+                      {new Date(h.changed_at).toLocaleString("fr-FR", {
+                        day: "numeric", month: "long", year: "numeric",
+                        hour: "2-digit", minute: "2-digit",
+                      })}
+                    </Text>
+                  </View>
+                ))
+              )}
+
+              <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+              {/* Bloc 3 : Publications */}
+              <Text style={[styles.fieldLabel, { color: C.gold }]}>📢 Publications</Text>
+              {pubLoading ? (
+                <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
+              ) : (
+                <>
+                  <Text style={[styles.historySubGroup, { color: C.muted }]}>📰 Nouvelles du jour ({filteredPubNews.length})</Text>
+                  {filteredPubNews.length === 0 ? (
+                    <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune nouvelle trouvée.</Text>
+                  ) : (
+                    filteredPubNews.map((n) => (
+                      <View key={n.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                        <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{n.content}</Text>
+                        <Text style={[styles.historyDate, { color: C.muted }]}>
+                          {n.author_prenom} {n.author_nom} · {new Date(n.created_at).toLocaleString("fr-FR", {
+                            day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+
+                  <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>🤝 Entraide — besoins ({filteredPubTasks.length})</Text>
+                  {filteredPubTasks.length === 0 ? (
+                    <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun besoin trouvé.</Text>
+                  ) : (
+                    filteredPubTasks.map((t) => (
+                      <View key={t.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                        <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={1}>
+                          {TASK_CAT_ICONS[t.category]} {t.title}
+                        </Text>
+                        <Text style={[styles.historyDate, { color: C.muted }]}>
+                          {new Date(t.created_at).toLocaleString("fr-FR", {
+                            day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+
+                  <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>💛 Mur de soutien ({filteredPubMessages.length})</Text>
+                  {filteredPubMessages.length === 0 ? (
+                    <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun message trouvé.</Text>
+                  ) : (
+                    filteredPubMessages.map((m) => (
+                      <View key={m.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
+                        <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{m.message}</Text>
+                        <Text style={[styles.historyDate, { color: C.muted }]}>
+                          {m.author_prenom} {m.author_nom} · {new Date(m.created_at).toLocaleString("fr-FR", {
+                            day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
+                          })}
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </>
+              )}
             </View>
           </>
         )}
 
         {/* ── Section : Conservation RGPD ──────────────────────────────────── */}
-        {hasSpace && space && (() => {
+        {hasSpace && space && activeSection === "rgpd" && (() => {
           const purgeDate = new Date(space.purge_scheduled_at);
           const todayMs = new Date().setHours(0, 0, 0, 0);
           const daysLeft = Math.ceil((purgeDate.getTime() - todayMs) / (1000 * 60 * 60 * 24));
@@ -1632,152 +1844,6 @@ export default function SettingsScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── MODAL HISTORIQUE ─────────────────────────────────────────────── */}
-      <Modal visible={historyModal} transparent animationType="slide" onRequestClose={() => setHistoryModal(false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
-          <View style={styles.overlay}>
-            <TouchableOpacity
-              style={StyleSheet.absoluteFill}
-              activeOpacity={1}
-              onPress={() => setHistoryModal(false)}
-            />
-            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent, maxHeight: SHEET_MAX_HEIGHT }]}>
-              <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={[styles.sheetTitle, { color: "#fff" }]}>🕐 Historique</Text>
-
-                <TextInput
-                  style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text, marginBottom: 16 }]}
-                  placeholder="🔍 Rechercher un mot-clé (toutes rubriques)…"
-                  placeholderTextColor={C.muted}
-                  value={historySearch}
-                  onChangeText={setHistorySearch}
-                />
-
-                {/* Bloc 1 : Infos hospitalières */}
-                <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>🏥 Infos hospitalières</Text>
-                {historyLoading ? (
-                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
-                ) : hospitalFieldHistory.length === 0 ? (
-                  <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun changement trouvé.</Text>
-                ) : (
-                  hospitalFieldHistory.map((h) => (
-                    <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                      <Text style={[styles.historyField, { color: "#fff" }]}>
-                        {FIELD_ICONS[h.field_name] ?? "✏️"} {FIELD_LABELS[h.field_name] ?? h.field_name}
-                        {h.new_value ? ` → "${h.new_value}"` : " → (vide)"}
-                      </Text>
-                      {h.old_value != null && (
-                        <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
-                      )}
-                      <Text style={[styles.historyDate, { color: C.muted }]}>
-                        {new Date(h.changed_at).toLocaleString("fr-FR", {
-                          day: "numeric", month: "long", year: "numeric",
-                          hour: "2-digit", minute: "2-digit",
-                        })}
-                      </Text>
-                    </View>
-                  ))
-                )}
-
-                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-                {/* Bloc 2 : Consignes de visite */}
-                <Text style={[styles.fieldLabel, { color: C.gold }]}>📝 Consignes de visite</Text>
-                {historyLoading ? (
-                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
-                ) : visitRulesHistory.length === 0 ? (
-                  <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune modification enregistrée.</Text>
-                ) : (
-                  visitRulesHistory.map((h) => (
-                    <View key={h.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                      <Text style={[styles.historyField, { color: "#fff" }]}>
-                        {h.new_value ? `→ "${h.new_value}"` : "→ (vide)"}
-                      </Text>
-                      {h.old_value != null && (
-                        <Text style={[styles.historyOld, { color: C.muted }]}>était : {h.old_value || "(vide)"}</Text>
-                      )}
-                      <Text style={[styles.historyDate, { color: C.muted }]}>
-                        {new Date(h.changed_at).toLocaleString("fr-FR", {
-                          day: "numeric", month: "long", year: "numeric",
-                          hour: "2-digit", minute: "2-digit",
-                        })}
-                      </Text>
-                    </View>
-                  ))
-                )}
-
-                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-                {/* Bloc 3 : Publications */}
-                <Text style={[styles.fieldLabel, { color: C.gold }]}>📢 Publications</Text>
-                {pubLoading ? (
-                  <ActivityIndicator color={C.accent} style={{ marginVertical: 8 }} />
-                ) : (
-                  <>
-                    <Text style={[styles.historySubGroup, { color: C.muted }]}>📰 Nouvelles du jour ({filteredPubNews.length})</Text>
-                    {filteredPubNews.length === 0 ? (
-                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucune nouvelle trouvée.</Text>
-                    ) : (
-                      filteredPubNews.map((n) => (
-                        <View key={n.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{n.content}</Text>
-                          <Text style={[styles.historyDate, { color: C.muted }]}>
-                            {n.author_prenom} {n.author_nom} · {new Date(n.created_at).toLocaleString("fr-FR", {
-                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-                            })}
-                          </Text>
-                        </View>
-                      ))
-                    )}
-
-                    <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>🤝 Entraide — besoins ({filteredPubTasks.length})</Text>
-                    {filteredPubTasks.length === 0 ? (
-                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun besoin trouvé.</Text>
-                    ) : (
-                      filteredPubTasks.map((t) => (
-                        <View key={t.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={1}>
-                            {TASK_CAT_ICONS[t.category]} {t.title}
-                          </Text>
-                          <Text style={[styles.historyDate, { color: C.muted }]}>
-                            {new Date(t.created_at).toLocaleString("fr-FR", {
-                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-                            })}
-                          </Text>
-                        </View>
-                      ))
-                    )}
-
-                    <Text style={[styles.historySubGroup, { color: C.muted, marginTop: 10 }]}>💛 Mur de soutien ({filteredPubMessages.length})</Text>
-                    {filteredPubMessages.length === 0 ? (
-                      <Text style={[styles.historyEmpty, { color: C.muted }]}>Aucun message trouvé.</Text>
-                    ) : (
-                      filteredPubMessages.map((m) => (
-                        <View key={m.id} style={[styles.historyRow, { borderLeftColor: C.accent }]}>
-                          <Text style={[styles.historyField, { color: "#fff" }]} numberOfLines={2}>{m.message}</Text>
-                          <Text style={[styles.historyDate, { color: C.muted }]}>
-                            {m.author_prenom} {m.author_nom} · {new Date(m.created_at).toLocaleString("fr-FR", {
-                              day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit",
-                            })}
-                          </Text>
-                        </View>
-                      ))
-                    )}
-                  </>
-                )}
-
-                <TouchableOpacity
-                  onPress={() => setHistoryModal(false)}
-                  style={[styles.saveNotesBtn, { backgroundColor: C.accent, marginTop: 16 }]}
-                >
-                  <Text style={styles.saveNotesBtnText}>Fermer</Text>
-                </TouchableOpacity>
-              </ScrollView>
-            </View>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
       {/* ── MODAL CHANGEMENT DE NOM ──────────────────────────────────────── */}
       <Modal visible={nameChangeModal} transparent animationType="slide" onRequestClose={() => setNameChangeModal(false)}>
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
@@ -1874,6 +1940,24 @@ const styles = StyleSheet.create({
   patientName: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 16 },
   patientHospital: { fontFamily: "DM_Sans_400Regular", fontSize: 13, marginTop: 2 },
 
+  // Grille de tuiles des réglages
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 16 },
+  tile: {
+    width: "47%", borderWidth: 1, borderRadius: 16, padding: 14,
+    gap: 8, position: "relative",
+  },
+  tileIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+  },
+  tileIconText: { fontSize: 18 },
+  tileLabel: { fontFamily: "DM_Sans_700Bold", fontSize: 13, lineHeight: 17 },
+  tileHint: { fontFamily: "DM_Sans_400Regular", fontSize: 11, lineHeight: 15 },
+  tileChevron: { position: "absolute", top: 14, right: 12, fontFamily: "DM_Sans_700Bold", fontSize: 14 },
+
+  backToGrid: { alignSelf: "flex-start", marginTop: 16, marginBottom: 4, paddingVertical: 4 },
+  backToGridText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
+
   // Photo
   photoRow: { flexDirection: "row", alignItems: "center", gap: 16 },
   photoBtn: {
@@ -1954,6 +2038,8 @@ const styles = StyleSheet.create({
   stepBtn: { width: 36, height: 36, borderWidth: 1, borderRadius: 8, alignItems: "center", justifyContent: "center" },
   stepBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 18, lineHeight: 20 },
   stepValue: { fontFamily: "DM_Sans_700Bold", fontSize: 16, minWidth: 48, textAlign: "center" },
+  scrubValue: { alignItems: "center", justifyContent: "center", borderWidth: 1.5, borderRadius: 18, paddingVertical: 4, paddingHorizontal: 14, minWidth: 72 },
+  scrubChevron: { fontSize: 11, lineHeight: 12, fontFamily: "DM_Sans_700Bold" },
   pillRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },
   pill: { borderWidth: 1, borderRadius: 20, paddingHorizontal: 12, paddingVertical: 7 },
   pillText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },

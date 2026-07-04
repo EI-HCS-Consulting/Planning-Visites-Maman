@@ -26,6 +26,17 @@ const CAT_ICONS: Record<Task["category"], string> = {
   repas: "🍽️", affaires: "🧳", courses: "🛒", autre: "📌",
 };
 
+type AccountSectionKey = "info" | "pin" | "resv" | "souvenirs" | "news" | "soutien" | "besoins";
+const SECTION_META: Record<AccountSectionKey, { icon: string; label: string }> = {
+  info: { icon: "📝", label: "Mes informations" },
+  pin: { icon: "🔒", label: "Mon code PIN" },
+  resv: { icon: "📅", label: "Mes réservations" },
+  souvenirs: { icon: "📷", label: "Mes souvenirs" },
+  news: { icon: "📰", label: "Mes nouvelles" },
+  soutien: { icon: "💛", label: "Soutien" },
+  besoins: { icon: "🤝", label: "Mes besoins" },
+};
+
 // Onglet "Compte" côté visiteur — juste ses propres infos (pas de bouton
 // Paramètres, contrairement à la version admin). Prénom/Nom/Email/PIN ne
 // servent qu'à pré-remplir les futurs formulaires de réservation ; le PIN
@@ -45,6 +56,16 @@ export default function VisitorAccountScreen() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState("");
 
+  // Changement de PIN — 3 phases dans une même modale, réutilisant le même
+  // PinPad : (1) vérifier l'ancien PIN, (2) saisir le nouveau, (3) le
+  // confirmer. Le PIN d'un item déjà créé (réservation, nouvelle…) n'est
+  // jamais retouché ici : seul celui stocké dans la session change.
+  const [pinModalVisible, setPinModalVisible] = useState(false);
+  const [pinPhase, setPinPhase] = useState<"verify" | "new" | "confirm">("verify");
+  const [pinInput, setPinInput] = useState("");
+  const [newPinDraft, setNewPinDraft] = useState("");
+  const [pinModalError, setPinModalError] = useState(false);
+
   // Vue centralisée "Mes contributions" — tout ce que le visiteur a saisi
   // dans l'App, regroupé ici pour qu'il n'ait pas besoin de naviguer
   // ailleurs pour le retrouver. Le rapprochement se fait par prénom+nom
@@ -60,6 +81,10 @@ export default function VisitorAccountScreen() {
   // Lightbox plein écran pour "Mes souvenirs" — index dans mySouvenirs, ou
   // null si fermé.
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  // Section active de la grille de tuiles (null = grille affichée)
+  const [activeSection, setActiveSection] = useState<AccountSectionKey | null>(null);
+  const identityMissing = !prenom.trim() || !nom.trim();
 
   function showToast(msg: string) {
     setToast(msg);
@@ -128,12 +153,65 @@ export default function VisitorAccountScreen() {
       prenom: prenom.trim(),
       nom: nom.trim(),
       email: email.trim(),
-      pin,
       localPhotoUri: photoUri,
     });
     setSaving(false);
     showToast("Enregistré ✓");
     loadActivity(space.id, prenom, nom);
+  }
+
+  function openChangePinModal() {
+    setPinPhase("verify");
+    setPinInput("");
+    setNewPinDraft("");
+    setPinModalError(false);
+    setPinModalVisible(true);
+  }
+
+  function closeChangePinModal() {
+    setPinModalVisible(false);
+    setPinPhase("verify");
+    setPinInput("");
+    setNewPinDraft("");
+    setPinModalError(false);
+  }
+
+  async function handlePinInputChange(value: string) {
+    setPinModalError(false);
+    setPinInput(value);
+    if (value.length < 4) return;
+
+    if (pinPhase === "verify") {
+      if (value === pin) {
+        setPinPhase("new");
+        setPinInput("");
+      } else {
+        setPinModalError(true);
+        setPinInput("");
+      }
+      return;
+    }
+
+    if (pinPhase === "new") {
+      setNewPinDraft(value);
+      setPinInput("");
+      setPinPhase("confirm");
+      return;
+    }
+
+    // pinPhase === "confirm"
+    if (value === newPinDraft) {
+      if (!space) return;
+      setPin(value);
+      await saveVisitorSession({ token, spaceId: space.id, pin: value });
+      closeChangePinModal();
+      showToast("PIN modifié ✓");
+    } else {
+      setPinModalError(true);
+      setPinInput("");
+      setNewPinDraft("");
+      setPinPhase("new");
+    }
   }
 
   // Ouvre la réservation visée sur l'écran Créneaux (Visite) ou Nuitées
@@ -176,6 +254,14 @@ export default function VisitorAccountScreen() {
     );
   }
 
+  const missingIdentityCard = (
+    <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
+      <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
+        Renseigne ton prénom et ton nom dans "Mes informations" pour retrouver ici tout ce que tu as saisi dans l'App.
+      </Text>
+    </View>
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
@@ -196,6 +282,42 @@ export default function VisitorAccountScreen() {
           </Text>
         </TouchableOpacity>
 
+        {activeSection === null && (
+          <View style={styles.tileGrid}>
+            {(Object.keys(SECTION_META) as AccountSectionKey[]).map((key) => (
+              <TouchableOpacity
+                key={key}
+                style={[styles.tile, { backgroundColor: C.card, borderColor: C.border }]}
+                onPress={() => setActiveSection(key)}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.tileIcon, { backgroundColor: `${C.accent}22` }]}>
+                  <Text style={styles.tileIconText}>{SECTION_META[key].icon}</Text>
+                </View>
+                <Text style={[styles.tileLabel, { color: "#fff" }]}>{SECTION_META[key].label}</Text>
+                <Text style={[styles.tileHint, { color: C.muted }]}>
+                  {key === "info" ? (prenom.trim() && nom.trim() ? `${prenom} ${nom}` : "À compléter")
+                    : key === "pin" ? "Voir / changer"
+                    : key === "resv" ? `${myReservations.length} réservation(s)`
+                    : key === "souvenirs" ? `${mySouvenirs.length} photo(s)`
+                    : key === "news" ? `${myNews.length} nouvelle(s)`
+                    : key === "soutien" ? `${myMessages.length} message(s)`
+                    : `${myTasks.length} besoin(s)`}
+                </Text>
+                <Text style={[styles.tileChevron, { color: C.muted }]}>›</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {activeSection !== null && (
+          <TouchableOpacity style={styles.backToGrid} onPress={() => setActiveSection(null)} activeOpacity={0.7}>
+            <Text style={[styles.backToGridText, { color: C.accent }]}>← Retour à mon compte</Text>
+          </TouchableOpacity>
+        )}
+
+        {activeSection === "info" && (
+        <>
         <Text style={[styles.sectionTitle, { color: C.gold }]}>Mes informations</Text>
         <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
           <TextInput
@@ -226,6 +348,21 @@ export default function VisitorAccountScreen() {
           />
         </View>
 
+        <TouchableOpacity
+          style={[styles.saveBtn, { backgroundColor: C.accent }, saving && { opacity: 0.6 }]}
+          onPress={handleSave}
+          disabled={saving}
+        >
+          {saving
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <Text style={styles.saveBtnText}>Enregistrer</Text>
+          }
+        </TouchableOpacity>
+        </>
+        )}
+
+        {activeSection === "pin" && (
+        <>
         <View style={styles.sectionTitleRow}>
           <Text style={[styles.sectionTitle, { color: C.gold, marginBottom: 0 }]}>Mon code PIN</Text>
           <TouchableOpacity onPress={() => setPinRevealed((v) => !v)} style={styles.revealBtn}>
@@ -239,32 +376,18 @@ export default function VisitorAccountScreen() {
             Pour t'en souvenir — il te sera toujours redemandé pour valider une réservation,
             la modifier, l'annuler ou supprimer une photo.
           </Text>
-          <PinPad value={pin} onChange={setPin} theme={C} reveal={pinRevealed} />
+          <PinPad value={pin} onChange={() => {}} theme={C} reveal={pinRevealed} readOnly />
+          <TouchableOpacity style={[styles.changePinBtn, { borderColor: C.accent }]} onPress={openChangePinModal}>
+            <Text style={[styles.changePinBtnText, { color: C.accent }]}>Changer mon PIN</Text>
+          </TouchableOpacity>
         </View>
+        </>
+        )}
 
-        <TouchableOpacity
-          style={[styles.saveBtn, { backgroundColor: C.accent }, saving && { opacity: 0.6 }]}
-          onPress={handleSave}
-          disabled={saving}
-        >
-          {saving
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={styles.saveBtnText}>Enregistrer</Text>
-          }
-        </TouchableOpacity>
-
-        <Text style={[styles.sectionTitle, { color: C.gold }]}>Mes contributions</Text>
-        {activityLoading ? (
-          <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
-        ) : !prenom.trim() || !nom.trim() ? (
-          <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-            <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 0 }]}>
-              Renseigne ton prénom et ton nom ci-dessus pour retrouver ici tout ce que tu as
-              saisi dans l'App.
-            </Text>
-          </View>
-        ) : (
-          <>
+        {activeSection === "resv" && (
+          activityLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+          ) : identityMissing ? missingIdentityCard : (
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📅 Mes réservations ({myReservations.length})</Text>
               {myReservations.length === 0 ? (
@@ -283,7 +406,13 @@ export default function VisitorAccountScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          )
+        )}
 
+        {activeSection === "souvenirs" && (
+          activityLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+          ) : identityMissing ? missingIdentityCard : (
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📷 Mes souvenirs ({mySouvenirs.length})</Text>
               {mySouvenirs.length === 0 ? (
@@ -298,7 +427,13 @@ export default function VisitorAccountScreen() {
                 </View>
               )}
             </View>
+          )
+        )}
 
+        {activeSection === "news" && (
+          activityLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+          ) : identityMissing ? missingIdentityCard : (
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>📰 Mes nouvelles ({myNews.length})</Text>
               {myNews.length === 0 ? (
@@ -317,7 +452,13 @@ export default function VisitorAccountScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          )
+        )}
 
+        {activeSection === "soutien" && (
+          activityLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+          ) : identityMissing ? missingIdentityCard : (
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>💛 Mes messages de soutien ({myMessages.length})</Text>
               {myMessages.length === 0 ? (
@@ -339,7 +480,13 @@ export default function VisitorAccountScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+          )
+        )}
 
+        {activeSection === "besoins" && (
+          activityLoading ? (
+            <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
+          ) : identityMissing ? missingIdentityCard : (
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
               <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>🤝 Besoins dont je m'occupe ({myTasks.length})</Text>
               {myTasks.length === 0 ? (
@@ -363,7 +510,7 @@ export default function VisitorAccountScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-          </>
+          )
         )}
 
         <TouchableOpacity style={styles.switchLink} onPress={handleSwitchSpace}>
@@ -417,6 +564,32 @@ export default function VisitorAccountScreen() {
           )}
         </View>
       </Modal>
+
+      <Modal visible={pinModalVisible} transparent animationType="fade" onRequestClose={closeChangePinModal}>
+        <View style={styles.pinModalOverlay}>
+          <View style={[styles.pinModalCard, { backgroundColor: C.card, borderColor: C.border }]}>
+            <Text style={[styles.pinModalTitle, { color: "#fff" }]}>
+              {pinPhase === "verify" && "Confirme ton PIN actuel"}
+              {pinPhase === "new" && "Choisis ton nouveau PIN"}
+              {pinPhase === "confirm" && "Confirme ton nouveau PIN"}
+            </Text>
+            {pinModalError && (
+              <Text style={[styles.pinModalError, { color: C.danger }]}>
+                {pinPhase === "new" ? "Les PIN ne correspondent pas, recommence." : "PIN incorrect, réessaie."}
+              </Text>
+            )}
+            <PinPad
+              value={pinInput}
+              onChange={handlePinInputChange}
+              theme={C}
+              hasError={pinModalError}
+            />
+            <TouchableOpacity style={styles.pinModalCancel} onPress={closeChangePinModal}>
+              <Text style={[styles.pinModalCancelText, { color: C.muted }]}>Annuler</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -432,6 +605,22 @@ const styles = StyleSheet.create({
   photo: { width: 88, height: 88, borderRadius: 44, marginBottom: 8 },
   photoPlaceholder: { width: 88, height: 88, borderRadius: 44, borderWidth: 1, alignItems: "center", justifyContent: "center", marginBottom: 8 },
   photoHint: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12 },
+
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginBottom: 4 },
+  tile: {
+    width: "47%", borderWidth: 1, borderRadius: 16, padding: 14,
+    gap: 8, position: "relative",
+  },
+  tileIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+  },
+  tileIconText: { fontSize: 18 },
+  tileLabel: { fontFamily: "DM_Sans_700Bold", fontSize: 13, lineHeight: 17 },
+  tileHint: { fontFamily: "DM_Sans_400Regular", fontSize: 11, lineHeight: 15 },
+  tileChevron: { position: "absolute", top: 14, right: 12, fontFamily: "DM_Sans_700Bold", fontSize: 14 },
+  backToGrid: { alignSelf: "flex-start", marginBottom: 4, paddingVertical: 4 },
+  backToGridText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
 
   sectionTitle: { fontFamily: "DM_Sans_600SemiBold", fontSize: 11, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10, marginTop: 8 },
   sectionTitleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8, marginBottom: 10 },
@@ -454,6 +643,16 @@ const styles = StyleSheet.create({
 
   saveBtn: { borderRadius: 12, paddingVertical: 15, alignItems: "center", marginTop: 24 },
   saveBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 15, color: "#fff" },
+
+  changePinBtn: { borderWidth: 1, borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 6 },
+  changePinBtnText: { fontFamily: "DM_Sans_700Bold", fontSize: 13 },
+
+  pinModalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.75)", alignItems: "center", justifyContent: "center", padding: 24 },
+  pinModalCard: { width: "100%", maxWidth: 340, borderWidth: 1, borderRadius: 16, padding: 24, alignItems: "center" },
+  pinModalTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 17, textAlign: "center", marginBottom: 12 },
+  pinModalError: { fontFamily: "DM_Sans_600SemiBold", fontSize: 12, textAlign: "center", marginBottom: 10 },
+  pinModalCancel: { marginTop: 16 },
+  pinModalCancelText: { fontFamily: "DM_Sans_400Regular", fontSize: 13, textDecorationLine: "underline" },
 
   switchLink: { alignItems: "center", marginTop: 20 },
   switchLinkText: { fontFamily: "DM_Sans_400Regular", fontSize: 13, textDecorationLine: "underline" },

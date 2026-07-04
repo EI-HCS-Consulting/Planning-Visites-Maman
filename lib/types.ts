@@ -31,6 +31,8 @@ export interface PatientSpace {
   is_active: boolean;
   premium: boolean;
   invite_token: string;
+  dossier_code: string | null;
+  cap_email_sent_at: string | null;
   stripe_payment_id: string | null;
   last_activity_at: string;
   purge_scheduled_at: string;
@@ -44,6 +46,7 @@ export interface SlotConfig {
   visit_end_hour: number;
   slot_duration_minutes: number;
   min_gap_minutes: number;
+  gap_includes_duration: boolean;
   max_visitors_per_slot: number;
   night_enabled: boolean;
   max_night_visitors: number;

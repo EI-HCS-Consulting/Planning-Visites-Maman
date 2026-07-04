@@ -26,8 +26,12 @@ export function generateSlots(config: SlotConfig): string[] {
   const endMin = config.visit_end_hour * 60;
 
   // min_gap_minutes est l'intervalle entre les débuts de créneaux.
-  // 0 = dos à dos (step = durée seule).
-  const step = config.min_gap_minutes > 0 ? config.min_gap_minutes : config.slot_duration_minutes;
+  // 0 = dos à dos (step = durée seule). Si gap_includes_duration est activé,
+  // la durée de la visite s'ajoute à l'intervalle (ex. 20 min de visite +
+  // 1h d'intervalle -> créneaux à 12h00, 13h20, 14h40, ...).
+  const step = config.gap_includes_duration
+    ? config.slot_duration_minutes + config.min_gap_minutes
+    : (config.min_gap_minutes > 0 ? config.min_gap_minutes : config.slot_duration_minutes);
   for (let m = startMin; m + config.slot_duration_minutes <= endMin; m += step) {
     const h = Math.floor(m / 60);
     const min = m % 60;

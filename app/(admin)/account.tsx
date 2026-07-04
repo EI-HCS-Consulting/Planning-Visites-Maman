@@ -22,6 +22,14 @@ const CAT_ICONS: Record<Task["category"], string> = {
   autre: "💡",
 };
 
+type ContribKey = "resv" | "news" | "soutien" | "besoins";
+const CONTRIB_META: Record<ContribKey, { icon: string; label: string }> = {
+  resv: { icon: "📅", label: "Réservations" },
+  news: { icon: "📰", label: "Nouvelles" },
+  soutien: { icon: "💛", label: "Soutien" },
+  besoins: { icon: "🤝", label: "Besoins" },
+};
+
 const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.85;
 
 export default function AdminAccountScreen() {
@@ -58,6 +66,7 @@ export default function AdminAccountScreen() {
   const [savingPassword, setSavingPassword] = useState(false);
 
   const [toast, setToast] = useState("");
+  const [activeContrib, setActiveContrib] = useState<ContribKey | null>(null);
 
   function showToast(msg: string) {
     setToast(msg);
@@ -294,11 +303,11 @@ export default function AdminAccountScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.editProfileBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border }]}
+                style={[styles.editProfileBtn, { backgroundColor: C.accent, borderColor: C.accent }]}
                 onPress={handleOpenEditProfile}
                 activeOpacity={0.85}
               >
-                <Text style={[styles.editProfileBtnText, { color: C.muted }]}>✏️ Modifier mon profil</Text>
+                <Text style={[styles.editProfileBtnText, { color: "#fff" }]}>Mon profil</Text>
               </TouchableOpacity>
             </>
           )}
@@ -313,7 +322,39 @@ export default function AdminAccountScreen() {
               <ActivityIndicator color={C.accent} style={{ marginVertical: 16 }} />
             ) : (
               <>
+                {activeContrib === null && (
+                  <View style={styles.tileGrid}>
+                    {(["resv", "news", "soutien", "besoins"] as ContribKey[]).map((key) => (
+                      <TouchableOpacity
+                        key={key}
+                        style={[styles.tile, { backgroundColor: C.card, borderColor: C.border }]}
+                        onPress={() => setActiveContrib(key)}
+                        activeOpacity={0.8}
+                      >
+                        <View style={[styles.tileIcon, { backgroundColor: `${C.accent}22` }]}>
+                          <Text style={styles.tileIconText}>{CONTRIB_META[key].icon}</Text>
+                        </View>
+                        <Text style={[styles.tileLabel, { color: "#fff" }]}>{CONTRIB_META[key].label}</Text>
+                        <Text style={[styles.tileHint, { color: C.muted }]}>
+                          {key === "resv" ? `${reservations.length} réservation(s)`
+                            : key === "news" ? `${news.length} nouvelle(s)`
+                            : key === "soutien" ? `${messages.length} message(s)`
+                            : `${tasks.length} besoin(s)`}
+                        </Text>
+                        <Text style={[styles.tileChevron, { color: C.muted }]}>›</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
+
+                {activeContrib !== null && (
+                  <TouchableOpacity style={styles.backToGrid} onPress={() => setActiveContrib(null)} activeOpacity={0.7}>
+                    <Text style={[styles.backToGridText, { color: C.accent }]}>← Retour à mes contributions</Text>
+                  </TouchableOpacity>
+                )}
+
                 {/* Toutes les réservations de l'espace */}
+                {activeContrib === "resv" && (
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                   <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>
                     📅 Toutes les réservations ({reservations.length})
@@ -335,8 +376,10 @@ export default function AdminAccountScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
 
                 {/* Nouvelles */}
+                {activeContrib === "news" && (
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                   <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>
                     📰 Mes nouvelles ({news.length})
@@ -357,8 +400,10 @@ export default function AdminAccountScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
 
                 {/* Messages de soutien */}
+                {activeContrib === "soutien" && (
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                   <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>
                     💛 Mes messages de soutien ({messages.length})
@@ -379,8 +424,10 @@ export default function AdminAccountScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
 
                 {/* Besoins publiés */}
+                {activeContrib === "besoins" && (
                 <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
                   <Text style={[styles.activityGroupTitle, { color: "#fff" }]}>
                     🤝 Besoins publiés ({tasks.length})
@@ -422,6 +469,7 @@ export default function AdminAccountScreen() {
                     </TouchableOpacity>
                   ))}
                 </View>
+                )}
               </>
             )}
           </>
@@ -618,6 +666,22 @@ const styles = StyleSheet.create({
   patientRow: { flexDirection: "row", alignItems: "center", gap: 14 },
   patientName: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 18 },
   patientSub: { fontFamily: "DM_Sans_400Regular", fontSize: 13, marginTop: 2 },
+
+  tileGrid: { flexDirection: "row", flexWrap: "wrap", gap: 12, marginTop: 4 },
+  tile: {
+    width: "47%", borderWidth: 1, borderRadius: 16, padding: 14,
+    gap: 8, position: "relative",
+  },
+  tileIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    alignItems: "center", justifyContent: "center",
+  },
+  tileIconText: { fontSize: 18 },
+  tileLabel: { fontFamily: "DM_Sans_700Bold", fontSize: 13, lineHeight: 17 },
+  tileHint: { fontFamily: "DM_Sans_400Regular", fontSize: 11, lineHeight: 15 },
+  tileChevron: { position: "absolute", top: 14, right: 12, fontFamily: "DM_Sans_700Bold", fontSize: 14 },
+  backToGrid: { alignSelf: "flex-start", marginBottom: 4, paddingVertical: 4 },
+  backToGridText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
 
   activityGroupTitle: { fontFamily: "DM_Sans_700Bold", fontSize: 13, marginBottom: 4 },
   activityEmpty: { fontFamily: "DM_Sans_400Regular", fontSize: 13 },
