@@ -190,6 +190,53 @@ export default function SettingsScreen() {
 
   // Soin à domicile toggle
   const [homeCareToggling, setHomeCareToggling] = useState(false);
+  const [homeCareDraft, setHomeCareDraft] = useState(false);
+  useEffect(() => {
+    if (space) setHomeCareDraft(space.home_care_mode);
+  }, [space?.home_care_mode]);
+  const [homeCareTrackWidth, setHomeCareTrackWidth] = useState(0);
+  const homeCareTrackWidthRef = useRef(0);
+  const homeCareDraftRef = useRef(homeCareDraft);
+  useEffect(() => { homeCareDraftRef.current = homeCareDraft; }, [homeCareDraft]);
+  const homeCareTogglingRef = useRef(homeCareToggling);
+  useEffect(() => { homeCareTogglingRef.current = homeCareToggling; }, [homeCareToggling]);
+  const homeCareThumbX = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.spring(homeCareThumbX, { toValue: homeCareDraft ? 1 : 0, useNativeDriver: true, friction: 8 }).start();
+  }, [homeCareDraft]);
+  const [homeCareLeftLabelWidth, setHomeCareLeftLabelWidth] = useState(0);
+  const [homeCareRightLabelWidth, setHomeCareRightLabelWidth] = useState(0);
+  const [homeCareDescHeightHospital, setHomeCareDescHeightHospital] = useState(0);
+  const [homeCareDescHeightHome, setHomeCareDescHeightHome] = useState(0);
+  const homeCareDragStart = useRef(0);
+  const homeCarePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => !homeCareTogglingRef.current,
+      onMoveShouldSetPanResponder: () => !homeCareTogglingRef.current,
+      onPanResponderGrant: (evt) => {
+        const w = homeCareTrackWidthRef.current;
+        if (w <= 0) return;
+        const frac = Math.min(1, Math.max(0, evt.nativeEvent.locationX / w));
+        homeCareDragStart.current = frac;
+        homeCareThumbX.setValue(frac);
+      },
+      onPanResponderMove: (_, g) => {
+        const w = homeCareTrackWidthRef.current;
+        if (w <= 0) return;
+        const frac = Math.min(1, Math.max(0, homeCareDragStart.current + g.dx / w));
+        homeCareThumbX.setValue(frac);
+      },
+      onPanResponderRelease: (_, g) => {
+        const w = homeCareTrackWidthRef.current;
+        if (w <= 0) return;
+        const frac = Math.min(1, Math.max(0, homeCareDragStart.current + g.dx / w));
+        setHomeCareDraft(frac >= 0.5);
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(homeCareThumbX, { toValue: homeCareDraftRef.current ? 1 : 0, useNativeDriver: true, friction: 8 }).start();
+      },
+    })
+  ).current;
 
   // Nuitées toggle + heures
   const [nightToggling, setNightToggling] = useState(false);
@@ -474,10 +521,10 @@ export default function SettingsScreen() {
   }
 
   // ── Soin à domicile toggle ─────────────────────────────────────────────────
-  async function handleToggleHomeCare() {
+  async function handleConfirmHomeCare() {
     if (!space) return;
     setHomeCareToggling(true);
-    const nextMode = !space.home_care_mode;
+    const nextMode = homeCareDraft;
     const { error } = await supabase
       .from("patient_spaces")
       .update({ home_care_mode: nextMode })
@@ -491,8 +538,12 @@ export default function SettingsScreen() {
       loadHistory();
     }
     setHomeCareToggling(false);
-    if (error) showToast("Erreur lors de la mise à jour.");
-    else showToast(nextMode ? "Soin à domicile activé ✓" : "Retour au suivi hospitalier ✓");
+    if (error) {
+      showToast("Erreur lors de la mise à jour.");
+      return;
+    }
+    showToast(nextMode ? "Soin à domicile activé ✓" : "Retour au suivi hospitalier ✓");
+    setActiveSection("coord");
   }
 
   // ── Nuitées toggle ─────────────────────────────────────────────────────────
@@ -786,27 +837,102 @@ export default function SettingsScreen() {
             <>
             <Text style={[styles.sectionTitle, { color: C.gold }]}>Mode de soin</Text>
             <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-              <View style={styles.nightRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.nightLabel, { color: "#fff" }]}>
-                    {space.home_care_mode ? "Soin à domicile" : "Suivi à l'hôpital"}
-                  </Text>
-                  <Text style={[styles.nightDesc, { color: C.muted }]}>
-                    {space.home_care_mode
-                      ? "Le bandeau affiche une adresse classique et le lien Google Maps, sans coordonnées hospitalières."
-                      : "Activez si le patient quitte l'hôpital et que les visites se poursuivent à domicile."}
+              <View
+                style={{
+                  minHeight: Math.max(homeCareDescHeightHospital, homeCareDescHeightHome) || undefined,
+                  marginBottom: 4,
+                }}
+              >
+                <Text
+                  onLayout={(e) => setHomeCareDescHeightHospital(e.nativeEvent.layout.height)}
+                  style={[
+                    styles.nightDesc,
+                    { color: C.muted },
+                    homeCareDraft && styles.homeCareDescHidden,
+                  ]}
+                >
+                  Activez si le patient quitte l'hôpital et que les visites se poursuivent à domicile.
+                </Text>
+                <Text
+                  onLayout={(e) => setHomeCareDescHeightHome(e.nativeEvent.layout.height)}
+                  style={[
+                    styles.nightDesc,
+                    { color: C.muted },
+                    !homeCareDraft && styles.homeCareDescHidden,
+                  ]}
+                >
+                  Le bandeau affiche une adresse classique et le lien Google Maps, sans coordonnées hospitalières.
+                </Text>
+              </View>
+              <View
+                style={[styles.homeCareTrack, { borderColor: C.border, backgroundColor: C.bg }]}
+                onLayout={(e) => {
+                  const w = e.nativeEvent.layout.width;
+                  homeCareTrackWidthRef.current = w;
+                  setHomeCareTrackWidth(w);
+                }}
+                {...homeCarePanResponder.panHandlers}
+              >
+                {homeCareTrackWidth > 0 && homeCareLeftLabelWidth > 0 && homeCareRightLabelWidth > 0 && (() => {
+                  const half = homeCareTrackWidth / 2;
+                  const padding = 24;
+                  const thumbWidth = Math.max(homeCareLeftLabelWidth, homeCareRightLabelWidth) + padding;
+                  const leftPos = half / 2 - thumbWidth / 2;
+                  const rightPos = half + half / 2 - thumbWidth / 2;
+                  return (
+                    <Animated.View
+                      pointerEvents="none"
+                      style={[
+                        styles.homeCareThumb,
+                        {
+                          backgroundColor: C.accent,
+                          width: thumbWidth,
+                          transform: [{
+                            translateX: homeCareThumbX.interpolate({ inputRange: [0, 1], outputRange: [leftPos, rightPos] }),
+                          }],
+                        },
+                      ]}
+                    />
+                  );
+                })()}
+                <View style={styles.homeCareOption} pointerEvents="none">
+                  <Text
+                    onLayout={(e) => setHomeCareLeftLabelWidth(e.nativeEvent.layout.width)}
+                    style={[styles.homeCareOptionText, { color: !homeCareDraft ? "#fff" : C.muted }]}
+                  >
+                    Suivi à l'hôpital
                   </Text>
                 </View>
-                {homeCareToggling
-                  ? <ActivityIndicator color={C.accent} />
-                  : <Switch
-                      value={space.home_care_mode}
-                      onValueChange={handleToggleHomeCare}
-                      trackColor={{ false: C.border, true: C.accent }}
-                      thumbColor="#fff"
-                    />
-                }
+                <View style={styles.homeCareOption} pointerEvents="none">
+                  <Text
+                    onLayout={(e) => setHomeCareRightLabelWidth(e.nativeEvent.layout.width)}
+                    style={[styles.homeCareOptionText, { color: homeCareDraft ? "#fff" : C.muted }]}
+                  >
+                    Soin à domicile
+                  </Text>
+                </View>
               </View>
+              {(() => {
+                const homeCareChanged = homeCareDraft !== space.home_care_mode;
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.saveNotesBtn,
+                      homeCareChanged
+                        ? { backgroundColor: C.accent, marginTop: 4 }
+                        : { backgroundColor: "rgba(255,255,255,0.07)", borderWidth: 1, borderColor: C.border, marginTop: 4 },
+                      homeCareToggling && { opacity: 0.6 },
+                    ]}
+                    onPress={handleConfirmHomeCare}
+                    disabled={homeCareToggling || !homeCareChanged}
+                  >
+                    {homeCareToggling
+                      ? <ActivityIndicator color={homeCareChanged ? "#fff" : C.muted} size="small" />
+                      : <Text style={[styles.saveNotesBtnText, !homeCareChanged && { color: C.muted }]}>Confirmer</Text>
+                    }
+                  </TouchableOpacity>
+                );
+              })()}
             </View>
             </>
             )}
@@ -1987,6 +2113,17 @@ const styles = StyleSheet.create({
   nightRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   nightLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15, marginBottom: 4 },
   nightDesc: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 18 },
+
+  homeCareTrack: {
+    flexDirection: "row", width: "100%", height: 48,
+    borderWidth: 1, borderRadius: 24, overflow: "hidden", position: "relative",
+  },
+  homeCareThumb: {
+    position: "absolute", top: 0, bottom: 0, left: 0, borderRadius: 24,
+  },
+  homeCareOption: { flex: 1, alignItems: "center", justifyContent: "center" },
+  homeCareOptionText: { fontFamily: "DM_Sans_700Bold", fontSize: 13 },
+  homeCareDescHidden: { position: "absolute", left: 0, right: 0, opacity: 0 },
 
   toast: {
     position: "absolute", bottom: 24, alignSelf: "center",
