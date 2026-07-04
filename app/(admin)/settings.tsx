@@ -702,21 +702,6 @@ export default function SettingsScreen() {
     );
   }
 
-  // ── Logout ─────────────────────────────────────────────────────────────────
-  function handleLogout() {
-    Alert.alert("Déconnexion", "Voulez-vous vous déconnecter ?", [
-      { text: "Annuler", style: "cancel" },
-      {
-        text: "Se déconnecter",
-        style: "destructive",
-        onPress: async () => {
-          await supabase.auth.signOut();
-          router.replace("/");
-        },
-      },
-    ]);
-  }
-
   if (loading) {
     return (
       <View style={[styles.center, { backgroundColor: C.bg }]}>
@@ -752,7 +737,7 @@ export default function SettingsScreen() {
                 </View>
               </View>
               <TouchableOpacity
-                style={[styles.saveNotesBtn, { backgroundColor: C.accent, borderWidth: 1, borderColor: C.accent }]}
+                style={[styles.saveNotesBtn, { backgroundColor: C.accent, borderWidth: 1, borderColor: C.accent, marginTop: 14 }]}
                 onPress={() => setEditProfileModal(true)}
               >
                 <Text style={[styles.saveNotesBtnText, { color: "#fff" }]}>Profil Patient</Text>
@@ -1621,18 +1606,6 @@ export default function SettingsScreen() {
           );
         })()}
 
-        {/* ── Section : Compte ─────────────────────────────────────────────── */}
-        <Text style={[styles.sectionTitle, { color: C.gold }]}>Compte</Text>
-        <View style={[styles.card, { backgroundColor: C.card, borderColor: C.border }]}>
-          <TouchableOpacity
-            style={[styles.logoutBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
-            onPress={handleLogout}
-            activeOpacity={0.85}
-          >
-            <Text style={[styles.logoutText, { color: "#e94560" }]}>Se déconnecter</Text>
-          </TouchableOpacity>
-        </View>
-
       </ScrollView>
 
       {/* ── MODAL CALENDRIER DATES BLOQUÉES ─────────────────────────────── */}
@@ -2014,13 +1987,6 @@ const styles = StyleSheet.create({
   nightRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   nightLabel: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15, marginBottom: 4 },
   nightDesc: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 18 },
-
-  // Logout
-  logoutBtn: {
-    borderWidth: 1, borderRadius: 10,
-    paddingVertical: 14, alignItems: "center",
-  },
-  logoutText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15 },
 
   toast: {
     position: "absolute", bottom: 24, alignSelf: "center",

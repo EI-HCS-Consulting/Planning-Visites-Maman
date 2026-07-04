@@ -240,6 +240,20 @@ export default function AdminAccountScreen() {
     setActivityLoading(false);
   }
 
+  function handleLogout() {
+    Alert.alert("Déconnexion", "Voulez-vous vous déconnecter ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Se déconnecter",
+        style: "destructive",
+        onPress: async () => {
+          await supabase.auth.signOut();
+          router.replace("/");
+        },
+      },
+    ]);
+  }
+
   function handleOpenReservation(r: Reservation) {
     if (r.type === "Nuit") {
       router.push("/(admin)/home/nights" as any);
@@ -345,6 +359,16 @@ export default function AdminAccountScreen() {
                       </TouchableOpacity>
                     ))}
                   </View>
+                )}
+
+                {activeContrib === null && (
+                  <TouchableOpacity
+                    style={[styles.logoutBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
+                    onPress={handleLogout}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.logoutText, { color: "#e94560" }]}>Se déconnecter</Text>
+                  </TouchableOpacity>
                 )}
 
                 {activeContrib !== null && (
@@ -697,6 +721,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   editProfileBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
+
+  logoutBtn: {
+    borderWidth: 1, borderRadius: 10,
+    paddingVertical: 14, alignItems: "center",
+    marginTop: 16,
+  },
+  logoutText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15 },
 
   toast: { position: "absolute", bottom: 24, alignSelf: "center", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
   toastText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "#fff" },
