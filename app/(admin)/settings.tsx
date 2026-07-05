@@ -230,7 +230,9 @@ export default function SettingsScreen() {
         const w = homeCareTrackWidthRef.current;
         if (w <= 0) return;
         const frac = Math.min(1, Math.max(0, homeCareDragStart.current + g.dx / w));
-        setHomeCareDraft(frac >= 0.5);
+        const next = frac >= 0.5;
+        Animated.spring(homeCareThumbX, { toValue: next ? 1 : 0, useNativeDriver: true, friction: 8 }).start();
+        setHomeCareDraft(next);
       },
       onPanResponderTerminate: () => {
         Animated.spring(homeCareThumbX, { toValue: homeCareDraftRef.current ? 1 : 0, useNativeDriver: true, friction: 8 }).start();
@@ -525,15 +527,31 @@ export default function SettingsScreen() {
     if (!space) return;
     setHomeCareToggling(true);
     const nextMode = homeCareDraft;
+    const update: Record<string, string | boolean | null> = { home_care_mode: nextMode };
+    if (nextMode) {
+      update.home_address = homeAddress.trim() || null;
+      update.home_address_line2 = homeAddressLine2.trim() || null;
+      update.home_postal_code = homePostalCode.trim() || null;
+      update.home_city = homeCity.trim() || null;
+      update.home_country = homeCountry.trim() || null;
+    } else {
+      update.hospital_name = hospitalName.trim() || null;
+      update.hospital_address = hospitalAddress.trim() || null;
+      update.hospital_address_line2 = hospitalAddressLine2.trim() || null;
+      update.hospital_postal_code = hospitalPostalCode.trim() || null;
+      update.hospital_city = hospitalCity.trim() || null;
+      update.hospital_country = hospitalCountry.trim() || null;
+      update.hospital_maps_url = hospitalMapsUrl.trim() || null;
+    }
     const { error } = await supabase
       .from("patient_spaces")
-      .update({ home_care_mode: nextMode })
+      .update(update)
       .eq("id", space.id);
     if (!error) {
       await logFieldChange(
         "home_care_mode",
-        space.home_care_mode ? "Soin à domicile" : "Suivi à l'hôpital",
-        nextMode ? "Soin à domicile" : "Suivi à l'hôpital"
+        space.home_care_mode ? "Soin à domicile" : "Suivi hospitalier",
+        nextMode ? "Soin à domicile" : "Suivi hospitalier"
       );
       loadHistory();
     }
@@ -543,7 +561,7 @@ export default function SettingsScreen() {
       return;
     }
     showToast(nextMode ? "Soin à domicile activé ✓" : "Retour au suivi hospitalier ✓");
-    setActiveSection("coord");
+    setActiveSection(null);
   }
 
   // ── Nuitées toggle ─────────────────────────────────────────────────────────
@@ -861,7 +879,7 @@ export default function SettingsScreen() {
                     !homeCareDraft && styles.homeCareDescHidden,
                   ]}
                 >
-                  Le bandeau affiche une adresse classique et le lien Google Maps, sans coordonnées hospitalières.
+                  Activez si le patient doit faire un séjour hospitalier.
                 </Text>
               </View>
               <View
@@ -899,7 +917,7 @@ export default function SettingsScreen() {
                     onLayout={(e) => setHomeCareLeftLabelWidth(e.nativeEvent.layout.width)}
                     style={[styles.homeCareOptionText, { color: !homeCareDraft ? "#fff" : C.muted }]}
                   >
-                    Suivi à l'hôpital
+                    Suivi hospitalier
                   </Text>
                 </View>
                 <View style={[styles.homeCareOption, { right: 0 }]} pointerEvents="none">
@@ -910,6 +928,131 @@ export default function SettingsScreen() {
                     Soin à domicile
                   </Text>
                 </View>
+              </View>
+              <View style={{ marginTop: 16 }}>
+                {homeCareDraft ? (
+                  <>
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>📍 Adresse</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Ex : 12 rue des Lilas"
+                        placeholderTextColor={C.muted}
+                        value={homeAddress}
+                        onChangeText={setHomeAddress}
+                      />
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🏠 Complément d'adresse</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Ex : Bâtiment B, 2e étage"
+                        placeholderTextColor={C.muted}
+                        value={homeAddressLine2}
+                        onChangeText={setHomeAddressLine2}
+                      />
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.fieldLabel, { color: C.gold }]}>Code postal</Text>
+                          <TextInput
+                            style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                            placeholder="38000"
+                            placeholderTextColor={C.muted}
+                            value={homePostalCode}
+                            onChangeText={setHomePostalCode}
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <Text style={[styles.fieldLabel, { color: C.gold }]}>Ville</Text>
+                          <TextInput
+                            style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                            placeholder="Grenoble"
+                            placeholderTextColor={C.muted}
+                            value={homeCity}
+                            onChangeText={setHomeCity}
+                          />
+                        </View>
+                      </View>
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🌍 Pays</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Laisser vide si France"
+                        placeholderTextColor={C.muted}
+                        value={homeCountry}
+                        onChangeText={setHomeCountry}
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                        <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0 }]}>🗺️ Lien Google Maps</Text>
+                        {hospitalNameResolving && <ActivityIndicator color={C.accent} size="small" />}
+                      </View>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Colle ici le lien copié depuis Google Maps"
+                        placeholderTextColor={C.muted}
+                        value={hospitalMapsUrl}
+                        onChangeText={setHospitalMapsUrl}
+                        onBlur={handleHospitalMapsUrlBlur}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                      />
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🏥 Nom de l'hôpital</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Ex : CHU de Grenoble"
+                        placeholderTextColor={C.muted}
+                        value={hospitalName}
+                        onChangeText={setHospitalName}
+                      />
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>📍 Adresse</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Ex : Avenue de Maquis du Grésivaudan"
+                        placeholderTextColor={C.muted}
+                        value={hospitalAddress}
+                        onChangeText={setHospitalAddress}
+                      />
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🏥 Complément d'adresse</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Ex : Bâtiment Chevalier, entrée C"
+                        placeholderTextColor={C.muted}
+                        value={hospitalAddressLine2}
+                        onChangeText={setHospitalAddressLine2}
+                      />
+                      <View style={{ flexDirection: "row", gap: 8, marginTop: 12 }}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.fieldLabel, { color: C.gold }]}>Code postal</Text>
+                          <TextInput
+                            style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                            placeholder="38000"
+                            placeholderTextColor={C.muted}
+                            value={hospitalPostalCode}
+                            onChangeText={setHospitalPostalCode}
+                            keyboardType="number-pad"
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <Text style={[styles.fieldLabel, { color: C.gold }]}>Ville</Text>
+                          <TextInput
+                            style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                            placeholder="Grenoble"
+                            placeholderTextColor={C.muted}
+                            value={hospitalCity}
+                            onChangeText={setHospitalCity}
+                          />
+                        </View>
+                      </View>
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 12 }]}>🌍 Pays</Text>
+                      <TextInput
+                        style={[styles.sectorInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                        placeholder="Laisser vide si France"
+                        placeholderTextColor={C.muted}
+                        value={hospitalCountry}
+                        onChangeText={setHospitalCountry}
+                      />
+                    </>
+                )}
               </View>
               {(() => {
                 const homeCareChanged = homeCareDraft !== space.home_care_mode;

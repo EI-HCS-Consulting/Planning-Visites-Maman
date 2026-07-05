@@ -30,7 +30,7 @@ const CONTRIB_META: Record<ContribKey, { icon: string; label: string }> = {
   besoins: { icon: "🤝", label: "Besoins" },
 };
 
-const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.85;
+const SHEET_MAX_HEIGHT = Dimensions.get("window").height * 0.72;
 
 export default function AdminAccountScreen() {
   const router = useRouter();
@@ -67,6 +67,9 @@ export default function AdminAccountScreen() {
 
   const [toast, setToast] = useState("");
   const [activeContrib, setActiveContrib] = useState<ContribKey | null>(null);
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [pinTileOpen, setPinTileOpen] = useState(false);
+  const [tempEmail, setTempEmail] = useState("");
 
   function showToast(msg: string) {
     setToast(msg);
@@ -95,14 +98,18 @@ export default function AdminAccountScreen() {
   function handleOpenEditProfile() {
     setTempFirstname(adminFirstname);
     setTempLastname(adminLastname);
+    setTempEmail(adminEmail);
     setTempPin(adminPin);
     setPinRevealed(false);
+    setPinTileOpen(false);
     setEditProfileModal(true);
   }
 
   async function handleSaveProfile() {
     setSavingProfile(true);
+    const emailChanged = tempEmail.trim() !== adminEmail;
     const { error } = await supabase.auth.updateUser({
+      ...(emailChanged ? { email: tempEmail.trim() } : {}),
       data: {
         firstname: tempFirstname.trim(),
         lastname: tempLastname.trim(),
@@ -117,7 +124,7 @@ export default function AdminAccountScreen() {
     setAdminFirstname(tempFirstname.trim());
     setAdminLastname(tempLastname.trim());
     setAdminPin(tempPin);
-    showToast("Profil mis à jour ✓");
+    showToast(emailChanged ? "Profil mis à jour ✓ Vérifie tes emails pour confirmer la nouvelle adresse." : "Profil mis à jour ✓");
     setEditProfileModal(false);
   }
 
@@ -273,15 +280,11 @@ export default function AdminAccountScreen() {
   return (
     <View style={[styles.container, { backgroundColor: C.bg }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}>
+      <View
+        style={[styles.header, { backgroundColor: C.card, borderBottomColor: C.border }]}
+        onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+      >
         <Text style={[styles.headerTitle, { color: "#fff" }]}>👤 Mon compte</Text>
-        <TouchableOpacity
-          style={[styles.settingsBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border }]}
-          onPress={() => router.push("/(admin)/settings")}
-          activeOpacity={0.85}
-        >
-          <Text style={[styles.settingsBtnText, { color: C.muted }]}>⚙️ Paramètres</Text>
-        </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scroll}>
@@ -363,11 +366,21 @@ export default function AdminAccountScreen() {
 
                 {activeContrib === null && (
                   <TouchableOpacity
-                    style={[styles.logoutBtn, { borderColor: "rgba(233,69,96,0.4)" }]}
+                    style={[styles.editProfileBtn, { backgroundColor: C.accent, borderColor: C.accent, marginTop: 16 }]}
+                    onPress={() => router.push("/(admin)/settings")}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.editProfileBtnText, { color: "#fff" }]}>⚙️ Paramètres</Text>
+                  </TouchableOpacity>
+                )}
+
+                {activeContrib === null && (
+                  <TouchableOpacity
+                    style={[styles.editProfileBtn, { borderColor: "rgba(233,69,96,0.4)", marginTop: 18 }]}
                     onPress={handleLogout}
                     activeOpacity={0.85}
                   >
-                    <Text style={[styles.logoutText, { color: "#e94560" }]}>Se déconnecter</Text>
+                    <Text style={[styles.editProfileBtnText, { color: "#e94560" }]}>Se déconnecter</Text>
                   </TouchableOpacity>
                 )}
 
@@ -521,7 +534,16 @@ export default function AdminAccountScreen() {
               activeOpacity={1}
               onPress={() => setEditProfileModal(false)}
             />
-            <View style={[styles.sheet, { backgroundColor: C.card, borderColor: C.accent, maxHeight: SHEET_MAX_HEIGHT }]}>
+            <View
+              style={[
+                styles.sheet,
+                {
+                  backgroundColor: C.card,
+                  borderColor: C.accent,
+                  height: headerHeight > 0 ? Dimensions.get("window").height - headerHeight : SHEET_MAX_HEIGHT,
+                },
+              ]}
+            >
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text style={[styles.sheetTitle, { color: "#fff" }]}>✏️ Modifier mon profil</Text>
 
@@ -574,30 +596,55 @@ export default function AdminAccountScreen() {
                   onChangeText={setTempLastname}
                   autoCapitalize="words"
                 />
-
-                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
-
-                <View style={styles.sectionTitleRow}>
-                  <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0, marginBottom: 0 }]}>Mon code PIN</Text>
-                  <TouchableOpacity onPress={() => setPinRevealed((v) => !v)} style={{ paddingVertical: 2, paddingHorizontal: 4 }}>
-                    <Text style={[styles.smallBtnText, { color: C.accent }]}>
-                      {pinRevealed ? "🙈 Masquer" : "👁 Afficher"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-                <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 10 }]}>
-                  Il te sera redemandé si tu réinstalles l'app ou te connectes sur le web.
+                <Text style={[styles.fieldLabel, { color: C.gold }]}>Adresse email</Text>
+                <TextInput
+                  style={[styles.sheetInput, { backgroundColor: C.bg, borderColor: C.border, color: C.text }]}
+                  placeholder="Email"
+                  placeholderTextColor={C.muted}
+                  value={tempEmail}
+                  onChangeText={setTempEmail}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                />
+                <Text style={[styles.cardDesc, { color: C.muted, marginTop: 4 }]}>
+                  Email + mot de passe : c'est ce qui te sert à te connecter à ton compte admin, sur l'app comme sur le site web.
                 </Text>
-                <PinPad value={tempPin} onChange={setTempPin} theme={C} reveal={pinRevealed} />
-
-                <View style={[styles.fieldDivider, { backgroundColor: C.border, marginTop: 16 }]} />
-
                 <TouchableOpacity
-                  style={[styles.smallBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border, alignSelf: "flex-start" }]}
+                  style={[styles.smallBtn, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border, alignSelf: "flex-start", marginTop: 8 }]}
                   onPress={handleOpenChangePassword}
                 >
                   <Text style={[styles.smallBtnText, { color: C.muted }]}>🔒 Changer mon mot de passe</Text>
                 </TouchableOpacity>
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border }]} />
+
+                <Text style={[styles.cardDesc, { color: C.muted, marginBottom: 10 }]}>
+                  Code PIN : un code à 4 chiffres, différent du mot de passe. Il te sera redemandé si tu réinstalles l'app ou si tu te connectes sur le site web, pour confirmer que c'est bien toi.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.pinTile, { backgroundColor: "rgba(255,255,255,0.08)", borderColor: C.border }]}
+                  onPress={() => setPinTileOpen((v) => !v)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.pinTileText, { color: C.text }]}>🔑 Changer mon code PIN</Text>
+                  <Text style={{ color: C.muted, fontSize: 13 }}>{pinTileOpen ? "▲" : "▼"}</Text>
+                </TouchableOpacity>
+
+                {pinTileOpen && (
+                  <View style={{ marginTop: 12 }}>
+                    <View style={styles.sectionTitleRow}>
+                      <Text style={[styles.fieldLabel, { color: C.gold, marginTop: 0, marginBottom: 0 }]}>Mon code PIN</Text>
+                      <TouchableOpacity onPress={() => setPinRevealed((v) => !v)} style={{ paddingVertical: 2, paddingHorizontal: 4 }}>
+                        <Text style={[styles.smallBtnText, { color: C.accent }]}>
+                          {pinRevealed ? "🙈 Masquer" : "👁 Afficher"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <PinPad value={tempPin} onChange={setTempPin} theme={C} reveal={pinRevealed} />
+                  </View>
+                )}
+
+                <View style={[styles.fieldDivider, { backgroundColor: C.border, marginTop: 16 }]} />
 
                 <TouchableOpacity
                   style={[styles.saveBtn, { backgroundColor: C.accent, marginTop: 16 }, savingProfile && { opacity: 0.6 }]}
@@ -671,12 +718,6 @@ const styles = StyleSheet.create({
     flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between",
   },
   headerTitle: { fontFamily: "PlayfairDisplay_700Bold", fontSize: 20 },
-  settingsBtn: {
-    borderWidth: 1, borderRadius: 8,
-    paddingVertical: 6, paddingHorizontal: 12,
-    marginBottom: 2,
-  },
-  settingsBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
 
   scroll: { padding: 16, paddingBottom: 48 },
   sectionTitle: {
@@ -703,6 +744,12 @@ const styles = StyleSheet.create({
   tileIconText: { fontSize: 18 },
   tileLabel: { fontFamily: "DM_Sans_700Bold", fontSize: 13, lineHeight: 17 },
   tileHint: { fontFamily: "DM_Sans_400Regular", fontSize: 11, lineHeight: 15 },
+
+  pinTile: {
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    borderWidth: 1, borderRadius: 12, paddingVertical: 14, paddingHorizontal: 16,
+  },
+  pinTileText: { fontFamily: "DM_Sans_700Bold", fontSize: 14 },
   tileChevron: { position: "absolute", top: 14, right: 12, fontFamily: "DM_Sans_700Bold", fontSize: 14 },
   backToGrid: { alignSelf: "flex-start", marginBottom: 4, paddingVertical: 4 },
   backToGridText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 14 },
@@ -721,13 +768,6 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   editProfileBtnText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13 },
-
-  logoutBtn: {
-    borderWidth: 1, borderRadius: 10,
-    paddingVertical: 14, alignItems: "center",
-    marginTop: 16,
-  },
-  logoutText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 15 },
 
   toast: { position: "absolute", bottom: 24, alignSelf: "center", paddingVertical: 10, paddingHorizontal: 20, borderRadius: 10 },
   toastText: { fontFamily: "DM_Sans_600SemiBold", fontSize: 13, color: "#fff" },
