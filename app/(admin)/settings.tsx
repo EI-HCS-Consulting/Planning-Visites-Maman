@@ -874,11 +874,10 @@ export default function SettingsScreen() {
                 {...homeCarePanResponder.panHandlers}
               >
                 {homeCareTrackWidth > 0 && homeCareLeftLabelWidth > 0 && homeCareRightLabelWidth > 0 && (() => {
-                  const half = homeCareTrackWidth / 2;
                   const padding = 24;
                   const thumbWidth = Math.max(homeCareLeftLabelWidth, homeCareRightLabelWidth) + padding;
-                  const leftPos = half / 2 - thumbWidth / 2;
-                  const rightPos = half + half / 2 - thumbWidth / 2;
+                  const leftPos = 0;
+                  const rightPos = homeCareTrackWidth - thumbWidth;
                   return (
                     <Animated.View
                       pointerEvents="none"
@@ -895,7 +894,7 @@ export default function SettingsScreen() {
                     />
                   );
                 })()}
-                <View style={styles.homeCareOption} pointerEvents="none">
+                <View style={[styles.homeCareOption, { left: 0 }]} pointerEvents="none">
                   <Text
                     onLayout={(e) => setHomeCareLeftLabelWidth(e.nativeEvent.layout.width)}
                     style={[styles.homeCareOptionText, { color: !homeCareDraft ? "#fff" : C.muted }]}
@@ -903,7 +902,7 @@ export default function SettingsScreen() {
                     Suivi à l'hôpital
                   </Text>
                 </View>
-                <View style={styles.homeCareOption} pointerEvents="none">
+                <View style={[styles.homeCareOption, { right: 0 }]} pointerEvents="none">
                   <Text
                     onLayout={(e) => setHomeCareRightLabelWidth(e.nativeEvent.layout.width)}
                     style={[styles.homeCareOptionText, { color: homeCareDraft ? "#fff" : C.muted }]}
@@ -2115,13 +2114,13 @@ const styles = StyleSheet.create({
   nightDesc: { fontFamily: "DM_Sans_400Regular", fontSize: 13, lineHeight: 18 },
 
   homeCareTrack: {
-    flexDirection: "row", width: "100%", height: 48,
+    width: "100%", height: 48,
     borderWidth: 1, borderRadius: 24, overflow: "hidden", position: "relative",
   },
   homeCareThumb: {
     position: "absolute", top: 0, bottom: 0, left: 0, borderRadius: 24,
   },
-  homeCareOption: { flex: 1, alignItems: "center", justifyContent: "center" },
+  homeCareOption: { position: "absolute", top: 0, bottom: 0, justifyContent: "center", paddingHorizontal: 12 },
   homeCareOptionText: { fontFamily: "DM_Sans_700Bold", fontSize: 13 },
   homeCareDescHidden: { position: "absolute", left: 0, right: 0, opacity: 0 },
 
